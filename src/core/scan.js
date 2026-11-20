@@ -1,0 +1,409 @@
+// Hidden-text scanner: finds text a human doesn't see but a model (or a copy-paste) does.
+//
+//  tags        Unicode Tags block (U+E0000–E007F) — invisible ASCII, the classic hidden prompt injection
+//  vs-bits     long runs of VS15/VS16 after a character — emoji steganography (P4RS3LT0NGV3 scheme)
+//  vs-bytes    runs of variation selectors VS1–VS256 — one byte per selector ("emoji smuggling")
+//  zero-width  runs of zero-width characters (ZWSP, ZWNJ, ZWJ, WJ, BOM …) — zero-width steganography
+//  bidi        bidirectional overrides / isolates — text that renders in a different order ("Trojan Source")
+//  homoglyph   words mixing Latin with Cyrillic / Greek look-alikes
+//  css-hidden  page text hidden with CSS (display:none, zero size, transparent, off-screen …) — page scans only
+//  comment     HTML comments with sentence-like text — page scans only
+//
+// scanText() is pure; collectPage() is injected into a tab with chrome.scripting and must stay self-contained.
+
+import { decodeTags, decodeEmojiBits, decodeEmojiBytes, printableRatio } from './stego.js';
+import { transforms } from './registry.js';
+
+export const KINDS = {
+  tags: { label: 'Unicode tags', short: 'TAGS', desc: 'Invisible tag characters (U+E0000–E007F). Each one carries an ASCII byte that models read and humans never see.' },
+  'vs-bits': { label: 'Emoji stego (bits)', short: 'VS BITS', desc: 'A long run of VS15/VS16 variation selectors: one hidden bit per selector.' },
+  'vs-bytes': { label: 'Emoji stego (bytes)', short: 'VS BYTES', desc: 'A run of variation selectors VS1–VS256: one hidden byte per selector.' },
+  'zero-width': { label: 'Zero-width', short: 'ZERO-W', desc: 'Zero-width characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM …). Used for watermarks, fingerprinting and zero-width steganography.' },
+  bidi: { label: 'Bidi control', short: 'BIDI', desc: 'Bidirectional override / isolate characters. Text can render in a different order than it is read ("Trojan Source").' },
+  homoglyph: { label: 'Homoglyphs', short: 'HOMOGL', desc: 'Words mixing Latin letters with Cyrillic or Greek look-alikes (spoofing, filter evasion).' },
+  'css-hidden': { label: 'CSS-hidden text', short: 'HIDDEN', desc: 'Text in the page that CSS hides from view (display:none, zero size, transparent, clipped or off-screen) but that is still in the DOM — and in what an AI agent or summarizer reads.' },
+  comment: { label: 'HTML comment', short: 'COMMENT', desc: 'Sentence-like text in an HTML comment: invisible on the page, present in the source.' },
+};
+
+export const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+// phrases typical of injected instructions (override the model, or exfiltrate through it)
+const INSTRUCTION = new RegExp(
+  [
+    String.raw`\b(ignore|disregard|forget|override)\b.{0,40}\b(previous|prior|above|earlier|all|system)\b`,
+    String.raw`\b(system prompt|developer message|you are (now )?(an?|the) |act as|new instructions?|from now on|do not (tell|reveal|mention)|respond (only )?with|assistant:)`,
+    String.raw`<\|im_start\|>|\[INST\]|<<SYS>>`,
+    String.raw`\b(send|forward|email|e-mail|post|upload|leak|exfiltrate)\b.{0,40}\b(conversation|chat|history|messages?|password|credentials?|api keys?|tokens?|cookies?|secrets?|personal data)\b`,
+    String.raw`\b(when|if) (you are|you're) (an? )?(ai|llm|language model|assistant|agent)\b`,
+    String.raw`\bnote to (ai|llm|the (ai|model|assistant|agent))s?\b`,
+  ].join('|'),
+  'i',
+);
+
+export function looksLikeInstructions(s) {
+  return INSTRUCTION.test(s || '');
+}
+
+const ZW = '​‌‍⁠⁡⁢⁣⁤﻿᠎͏';
+const RE = {
+  tags: /(?:\udb40[\udc00-\udc7f])+/g,
+  vsBits: /[︎️](?:[︎️​‌‍⁠﻿]){15,}/g,
+  vsBytes: /(?:[︀-️]|\udb40[\udd00-\uddef]){2,}/g,
+  zw: new RegExp(`[${ZW}]{2,}|[${ZW}]`, 'g'),
+  bidi: /[‪-‮⁦-⁩‎‏؜]/g,
+};
+
+const NAMES = {
+  0x200b: 'ZWSP',
+  0x200c: 'ZWNJ',
+  0x200d: 'ZWJ',
+  0x2060: 'WJ',
+  0x2061: 'FA',
+  0x2062: 'IT',
+  0x2063: 'IS',
+  0x2064: 'IP',
+  0xfeff: 'BOM',
+  0x180e: 'MVS',
+  0x034f: 'CGJ',
+  0x202a: 'LRE',
+  0x202b: 'RLE',
+  0x202c: 'PDF',
+  0x202d: 'LRO',
+  0x202e: 'RLO',
+  0x2066: 'LRI',
+  0x2067: 'RLI',
+  0x2068: 'FSI',
+  0x2069: 'PDI',
+  0x200e: 'LRM',
+  0x200f: 'RLM',
+  0x061c: 'ALM',
+  0xfe0e: 'VS15',
+  0xfe0f: 'VS16',
+};
+
+/** Render invisible characters visibly: "a⟨ZWSP⟩b", tag chars as ⟨tag:x⟩ runs collapsed. */
+export function visualize(s, max = 400) {
+  let out = '';
+  let cut = false;
+  for (const c of s) {
+    const cp = c.codePointAt(0);
+    if (cp >= 0xe0000 && cp <= 0xe007f) out += '⟨' + (cp >= 0xe0020 && cp <= 0xe007e ? String.fromCharCode(cp - 0xe0000) : 'U+' + cp.toString(16).toUpperCase()) + '⟩';
+    else if (cp >= 0xfe00 && cp <= 0xfe0d) out += '⟨VS' + (cp - 0xfe00 + 1) + '⟩';
+    else if (cp >= 0xe0100 && cp <= 0xe01ef) out += '⟨VS' + (cp - 0xe0100 + 17) + '⟩';
+    else if (NAMES[cp]) out += '⟨' + NAMES[cp] + '⟩';
+    else out += c;
+    // marks shrink when merged below, so collect a few times `max` before cutting
+    if (out.length > max * 4) {
+      cut = true;
+      break;
+    }
+  }
+  // merge neighbouring marks: tag characters spell a word (⟨hi⟩), named characters stay apart (⟨VS16 VS15⟩)
+  out = out.replace(/(?<=⟨[^⟨⟩]{2,})⟩⟨|⟩⟨(?=[^⟨⟩]{2,}⟩)/g, ' ').replace(/⟩⟨/g, '');
+  if (!cut && out.length <= max) return out;
+  out = out.slice(0, max).replace(/[\uD800-\uDBFF]$/, '');
+  return out + (out.lastIndexOf('⟨') > out.lastIndexOf('⟩') ? '…⟩' : '…');
+}
+
+const isLowSurrogate = (c) => c >= 0xdc00 && c <= 0xdfff;
+
+function context(text, start, end, pad = 40) {
+  // never cut a surrogate pair in half; show invisible characters around the match too
+  let a = Math.max(0, start - pad);
+  if (a > 0 && isLowSurrogate(text.charCodeAt(a))) a--;
+  let b = Math.min(text.length, end + pad);
+  if (b < text.length && isLowSurrogate(text.charCodeAt(b))) b++;
+  return {
+    before: (a > 0 ? '…' : '') + visualize(text.slice(a, start).replace(/\s+/g, ' '), 160),
+    match: visualize(text.slice(start, end), 160),
+    after: visualize(text.slice(end, b).replace(/\s+/g, ' '), 160) + (b < text.length ? '…' : ''),
+  };
+}
+
+const LATIN = /[A-Za-z]/;
+const CONFUSABLE = /[Ѐ-ӿͰ-Ͽ]/;
+
+/**
+ * Scan one string. Returns findings: { kind, severity, start, end, count, payload, ctx, note }.
+ * @param {string} text
+ * @param {{ stego?: object }} [opts]
+ */
+export function scanText(text, opts = {}) {
+  const out = [];
+  if (!text) return out;
+  const covered = []; // [start, end] ranges already explained by a stronger finding
+  const isCovered = (s, e) => covered.some(([a, b]) => s >= a && e <= b);
+  const push = (f) => {
+    out.push(f);
+    covered.push([f.start, f.end]);
+  };
+
+  for (const m of text.matchAll(RE.tags)) {
+    const payload = decodeTags(m[0]);
+    const n = [...m[0]].length;
+    const instr = looksLikeInstructions(payload);
+    push({
+      kind: 'tags',
+      severity: payload.trim().length >= 3 ? 'critical' : 'high',
+      start: m.index,
+      end: m.index + m[0].length,
+      count: n,
+      payload,
+      instructions: instr,
+      ctx: context(text, m.index, m.index + m[0].length),
+      note: `${n} tag characters`,
+    });
+  }
+
+  for (const m of text.matchAll(RE.vsBits)) {
+    const start = Math.max(0, m.index - 2);
+    const payload = decodeEmojiBits(text.slice(start, m.index + m[0].length), opts.stego);
+    if (!payload || printableRatio(payload) < 0.8) continue;
+    push({
+      kind: 'vs-bits',
+      severity: 'critical',
+      start: m.index,
+      end: m.index + m[0].length,
+      count: [...m[0]].length,
+      payload,
+      instructions: looksLikeInstructions(payload),
+      ctx: context(text, m.index, m.index + m[0].length),
+      note: `${[...m[0]].length} selectors after “${text.slice(start, m.index)}”`,
+    });
+  }
+
+  for (const m of text.matchAll(RE.vsBytes)) {
+    if (isCovered(m.index, m.index + m[0].length)) continue;
+    const payload = decodeEmojiBytes(m[0]);
+    const n = [...m[0]].length;
+    if (!payload || printableRatio(payload) < 0.8 || payload.trim().length < 2) continue;
+    push({
+      kind: 'vs-bytes',
+      severity: 'critical',
+      start: m.index,
+      end: m.index + m[0].length,
+      count: n,
+      payload,
+      instructions: looksLikeInstructions(payload),
+      ctx: context(text, m.index, m.index + m[0].length),
+      note: `${n} variation selectors`,
+    });
+  }
+
+  // zero-width: one finding per string, with every run counted; try the zero-width steganography decoder
+  const zw = [...text.matchAll(RE.zw)].filter((m) => !isCovered(m.index, m.index + m[0].length));
+  if (zw.length) {
+    const total = zw.reduce((n, m) => n + [...m[0]].length, 0);
+    const longest = zw.reduce((a, m) => (m[0].length > a[0].length ? m : a));
+    let payload = '';
+    const t = transforms.zerowidth_steganography;
+    if (t && total >= 8) {
+      try {
+        const d = t.reverse(text);
+        if (d && d !== text && printableRatio(d) > 0.9 && d.trim().length >= 2 && !text.includes(d)) payload = d;
+      } catch {
+        /* not zero-width stego */
+      }
+    }
+    // a lone ZWJ inside an emoji sequence (👨‍👩‍👧) or a BOM at the very start is normal
+    const benign = zw.every((m) => (m[0] === '‍' && /\p{Extended_Pictographic}/u.test(text.slice(Math.max(0, m.index - 2), m.index + 3))) || (m[0] === '﻿' && m.index === 0));
+    if (!benign) {
+      push({
+        kind: 'zero-width',
+        severity: payload ? 'critical' : longest[0].length >= 8 ? 'high' : total >= 3 ? 'medium' : 'low',
+        start: longest.index,
+        end: longest.index + longest[0].length,
+        count: total,
+        payload,
+        instructions: looksLikeInstructions(payload),
+        ctx: context(text, longest.index, longest.index + longest[0].length),
+        note: `${total} zero-width character${total === 1 ? '' : 's'} in ${zw.length} run${zw.length === 1 ? '' : 's'}`,
+      });
+    }
+  }
+
+  const bidi = [...text.matchAll(RE.bidi)];
+  if (bidi.length) {
+    const overrides = bidi.filter((m) => /[‭‮]/.test(m[0])).length;
+    const first = bidi[0];
+    push({
+      kind: 'bidi',
+      severity: overrides ? 'high' : bidi.length > 2 ? 'medium' : 'low',
+      start: first.index,
+      end: first.index + 1,
+      count: bidi.length,
+      payload: '',
+      ctx: context(text, first.index, first.index + 1),
+      note: `${bidi.length} bidi control${bidi.length === 1 ? '' : 's'}${overrides ? `, ${overrides} override${overrides === 1 ? '' : 's'} (LRO/RLO)` : ''}`,
+    });
+  }
+
+  // homoglyphs: a word made of letters that mixes Latin and Cyrillic/Greek
+  const words = [...text.matchAll(/[\p{L}\p{M}]{3,}/gu)].filter((m) => LATIN.test(m[0]) && CONFUSABLE.test(m[0]));
+  if (words.length) {
+    const first = words[0];
+    push({
+      kind: 'homoglyph',
+      severity: words.length > 2 ? 'medium' : 'low',
+      start: first.index,
+      end: first.index + first[0].length,
+      count: words.length,
+      payload: words
+        .slice(0, 12)
+        .map((m) => m[0])
+        .join(', '),
+      ctx: context(text, first.index, first.index + first[0].length),
+      note: `${words.length} mixed-script word${words.length === 1 ? '' : 's'}`,
+    });
+  }
+
+  return out;
+}
+
+/** Scan the chunks returned by collectPage(). Findings get `where` / `path`. */
+export function scanPage(collected, opts = {}) {
+  const findings = [];
+  for (const chunk of collected?.chunks || []) {
+    if (chunk.where === 'css-hidden' || chunk.where === 'comment') {
+      const instr = looksLikeInstructions(chunk.text);
+      findings.push({
+        kind: chunk.where,
+        severity: instr ? 'high' : chunk.where === 'css-hidden' && chunk.text.length > 200 ? 'medium' : 'low',
+        count: chunk.text.length,
+        payload: chunk.text,
+        instructions: instr,
+        ctx: { before: '', match: chunk.text.slice(0, 160), after: chunk.text.length > 160 ? '…' : '' },
+        note: chunk.why || '',
+        where: chunk.where,
+        path: chunk.path,
+        frame: chunk.frame,
+      });
+    }
+    for (const f of scanText(chunk.text, opts)) findings.push({ ...f, where: chunk.where, path: chunk.path, attr: chunk.attr, frame: chunk.frame });
+  }
+  findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || (b.instructions ? 1 : 0) - (a.instructions ? 1 : 0));
+  return findings;
+}
+
+/**
+ * Injected into the page (chrome.scripting.executeScript({ func: collectPage })). Self-contained.
+ * Returns { url, title, chunks: [{ where: 'text'|'attr'|'css-hidden'|'comment'|'title', path, attr?, text, why? }], truncated }.
+ */
+export function collectPage() {
+  const SUSPICIOUS = /[​-‏‪-‮⁠-⁤⁦-⁩﻿᠎͏؜︀-️]|\udb40[\udc00-\udfff]|[A-Za-z][Ѐ-ӿͰ-Ͽ]|[Ѐ-ӿͰ-Ͽ][A-Za-z]/;
+  const MAX_CHUNKS = 3000;
+  const chunks = [];
+  let truncated = false;
+  const seenHidden = new Set();
+
+  const path = (el) => {
+    const parts = [];
+    for (let n = el; n && n.nodeType === 1 && parts.length < 6; n = n.parentElement) {
+      let p = n.localName;
+      if (n.id) {
+        parts.unshift(p + '#' + CSS.escape(n.id));
+        break;
+      }
+      const sib = n.parentElement ? [...n.parentElement.children].filter((c) => c.localName === n.localName) : [];
+      if (sib.length > 1) p += `:nth-of-type(${sib.indexOf(n) + 1})`;
+      parts.unshift(p);
+    }
+    return parts.join(' > ');
+  };
+  const add = (c) => {
+    if (chunks.length >= MAX_CHUNKS) {
+      truncated = true;
+      return;
+    }
+    chunks.push(c);
+  };
+
+  const whyCache = new Map();
+  const hiddenWhy = (el) => {
+    if (whyCache.has(el)) return whyCache.get(el);
+    const why = hiddenWhyUncached(el);
+    whyCache.set(el, why);
+    return why;
+  };
+  const hiddenWhyUncached = (el) => {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none') return 'display: none';
+    if (cs.visibility === 'hidden' || cs.visibility === 'collapse') return 'visibility: hidden';
+    if (parseFloat(cs.opacity) === 0) return 'opacity: 0';
+    if (parseFloat(cs.fontSize) < 2) return 'font-size ' + cs.fontSize;
+    if (cs.color === 'transparent' || /rgba\(.*,\s*0\)$/.test(cs.color)) return 'transparent text';
+    const r = el.getBoundingClientRect();
+    if ((cs.position === 'absolute' || cs.position === 'fixed') && (r.right < -100 || r.bottom < -100 || r.left > innerWidth + 2000)) return 'positioned off-screen';
+    if ((r.width <= 1 || r.height <= 1) && cs.overflow === 'hidden') return 'clipped to ' + Math.round(r.width) + '×' + Math.round(r.height);
+    if (/rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(cs.clip) || cs.clipPath === 'inset(50%)' || cs.clipPath === 'inset(100%)') return 'clip';
+    return '';
+  };
+  const bgCache = new Map();
+  const bgOf = (el) => {
+    if (!el) return 'rgb(255, 255, 255)';
+    if (bgCache.has(el)) return bgCache.get(el);
+    const b = getComputedStyle(el).backgroundColor;
+    const v = b && b !== 'transparent' && !/rgba\(.*,\s*0\)$/.test(b) ? b : bgOf(el.parentElement);
+    bgCache.set(el, v);
+    return v;
+  };
+
+  if (SUSPICIOUS.test(document.title)) add({ where: 'title', path: 'title', text: document.title });
+
+  const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_COMMENT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.nodeValue || '';
+    if (node.nodeType === 8) {
+      const t = text.trim();
+      if (t.length >= 24 && /[a-z]{3,}\s+[a-z]{2,}\s+[a-z]{2,}/i.test(t) && !/^\[if |^<!|^(?:\/?\w+[#.\w-]*\s*)$/i.test(t)) add({ where: 'comment', path: node.parentElement ? path(node.parentElement) : 'document', text: t.slice(0, 4000) });
+      continue;
+    }
+    const el = node.parentElement;
+    if (!el || /^(script|style|noscript|template)$/i.test(el.localName)) continue;
+    if (SUSPICIOUS.test(text)) add({ where: 'text', path: path(el), text: text.slice(0, 20000) });
+    const t = text.trim();
+    if (t.length >= 12) {
+      // walk up to the element that hides it (cheap checks first)
+      let why = '';
+      let owner = el;
+      for (let n = el; n && n !== document.body && !why; n = n.parentElement) {
+        why = hiddenWhy(n);
+        if (why) owner = n;
+      }
+      if (!why) {
+        const cs = getComputedStyle(el);
+        if (cs.color === bgOf(el) && cs.backgroundImage === 'none') why = 'text colour = background (' + cs.color + ')';
+      }
+      if (why && !seenHidden.has(owner) && !owner.closest('[aria-live],[role=status],[role=alert],.sr-only,.visually-hidden,.screen-reader-text')) {
+        seenHidden.add(owner);
+        const full = (owner.textContent || '').replace(/\s+/g, ' ').trim();
+        if (full.length >= 12) add({ where: 'css-hidden', path: path(owner), text: full.slice(0, 4000), why });
+      }
+    }
+  }
+
+  const ATTRS = ['alt', 'title', 'aria-label', 'aria-description', 'placeholder', 'value', 'content', 'data-content', 'data-text'];
+  for (const el of document.querySelectorAll('*')) {
+    for (const a of ATTRS) {
+      const v = el.getAttribute(a);
+      if (v && SUSPICIOUS.test(v)) add({ where: 'attr', path: path(el), attr: a, text: v.slice(0, 20000) });
+    }
+  }
+  return { url: location.href, title: document.title, chunks, truncated };
+}
+
+/** Injected: scroll to and flash the element at `selector`. */
+export function locateInPage(selector) {
+  const el = document.querySelector(selector);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const prev = el.style.outline;
+  const prevOff = el.style.outlineOffset;
+  el.style.outline = '2px solid #ff5c5c';
+  el.style.outlineOffset = '2px';
+  setTimeout(() => {
+    el.style.outline = prev;
+    el.style.outlineOffset = prevOff;
+  }, 2400);
+  return true;
+}

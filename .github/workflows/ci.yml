@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+
+      - name: Test suite
+        run: node test/run-tests.mjs
+
+      - name: Syntax-check all sources (as ES modules)
+        run: |
+          set -e
+          for f in src/*.js src/core/*.js src/data/*.js ui/*.js ui/views/*.js tools/*.mjs test/*.mjs; do
+            node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
+          done
+
+      - name: Transform index is in sync with src/transforms
+        run: |
+          node tools/sync-transforms.mjs --check
+
+      - name: Validate manifest.json
+        run: |
+          node -e "
+            const m = require('./manifest.json'), p = require('./package.json');
+            if (m.manifest_version !== 3) throw new Error('manifest_version must be 3');
+            if (!/^\d+\.\d+\.\d+$/.test(m.version)) throw new Error('bad version ' + m.version);
+            if (m.version !== p.version) throw new Error('manifest ' + m.version + ' != package ' + p.version);
+            const fs = require('fs');
+            for (const f of [m.background.service_worker, m.action.default_popup, m.options_page, ...Object.values(m.icons)]) if (!fs.existsSync(f)) throw new Error('missing ' + f);
+            console.log('manifest OK v' + m.version);
+          "

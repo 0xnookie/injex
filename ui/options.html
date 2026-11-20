@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>injex · Settings</title>
+    <link rel="icon" href="../icons/icon32.png" />
+    <link rel="preload" href="../fonts/Inter.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="options">
+    <header class="opt-header">
+      <div class="opt-wrap">
+        <div class="brand">
+          <img src="../icons/logo.svg" alt="" width="24" height="24" />
+          <span>injex</span>
+          <span class="crumb">Settings</span>
+        </div>
+        <span class="saved" id="saved">Saved</span>
+        <span class="spacer"></span>
+        <a class="btn ghost" href="app.html?full=1" id="openDash">Open dashboard</a>
+      </div>
+    </header>
+
+    <main class="opt-wrap">
+      <div class="opt-hero">
+        <h1>Settings</h1>
+        <p>Everything is stored in this browser. Only the AI tools talk to the network — to openrouter.ai, with your key.</p>
+      </div>
+
+      <section class="card" id="appearance">
+        <h2>Appearance</h2>
+        <p>Follow the system, or force a theme.</p>
+        <div class="radio-row" id="theme">
+          <label><input type="radio" name="theme" value="auto" /> System</label>
+          <label><input type="radio" name="theme" value="dark" /> Dark</label>
+          <label><input type="radio" name="theme" value="light" /> Light</label>
+        </div>
+      </section>
+
+      <section class="card" id="ai">
+        <h2>AI tools (OpenRouter)</h2>
+        <p>PromptCraft, Anti-Classifier, translation and alphabet generation use your own <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter API key</a>. It never leaves this browser except in requests to openrouter.ai.</p>
+        <div class="form">
+          <div class="field" style="grid-column: 1 / -1">
+            <label for="orKey">API key</label>
+            <div class="inline-row">
+              <input type="password" id="orKey" class="mono" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false" style="flex: 1; min-width: 220px" />
+              <button class="btn" id="orShow" type="button">Show</button>
+              <button class="btn" id="orTest" type="button">
+                <svg class="i" viewBox="0 0 24 24"><circle cx="8" cy="15" r="3.5" /><path d="m10.5 12.5 8-8" /><path d="m16 7 2.5 2.5" /></svg>
+                Test key
+              </button>
+            </div>
+            <small id="orStatus"></small>
+          </div>
+          <div class="field">
+            <label for="mPromptcraft">PromptCraft model</label>
+            <input type="text" id="mPromptcraft" class="mono" list="orModels" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="mAnticlassifier">Anti-Classifier model</label>
+            <input type="text" id="mAnticlassifier" class="mono" list="orModels" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="mTranslate">Translation model</label>
+            <input type="text" id="mTranslate" class="mono" list="orModels" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label for="temp">Temperature</label>
+            <input type="number" id="temp" min="0" max="2" step="0.1" />
+            <small>Translation always uses 0.3.</small>
+          </div>
+        </div>
+        <datalist id="orModels"></datalist>
+        <div class="row-actions" style="margin-top: 14px">
+          <button class="btn ghost" id="orLoad" type="button">Load the full model list</button>
+          <span class="hint" id="orLoadMsg"></span>
+        </div>
+      </section>
+
+      <section class="card" id="stego">
+        <h2>Emoji steganography</h2>
+        <p>How “Emoji · bits” encodes: one variation selector per bit after the carrier. Change these only to match another tool — the decoder uses the same settings.</p>
+        <div class="form" id="stegoForm"></div>
+        <div class="field" style="margin-top: 16px">
+          <span class="lbl">Default carrier</span>
+          <div class="inline-row">
+            <div class="carriers" id="carriers"></div>
+            <input type="text" id="carrier" style="width: 64px; text-align: center" />
+          </div>
+        </div>
+        <div class="field" style="margin-top: 16px">
+          <span class="lbl">Preview — “hi” hidden in the carrier</span>
+          <div class="out" id="stegoPreview"></div>
+        </div>
+        <div class="row-actions" style="margin-top: 14px">
+          <button class="btn ghost" id="stegoReset" type="button">Restore defaults</button>
+        </div>
+      </section>
+
+      <section class="card" id="menu">
+        <h2>Right-click menu</h2>
+        <p>Transforms listed under <b>injex → Encode selection</b>. In text fields the selection is replaced; elsewhere the result is shown and copied.</p>
+        <div class="inline-row">
+          <input type="search" id="menuFilter" placeholder="Filter transforms" style="flex: 0 1 260px" />
+          <span class="muted small" id="menuCount"></span>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="menuNone" type="button">Clear</button>
+          <button class="btn ghost" id="menuReset" type="button">Defaults</button>
+        </div>
+        <div id="menuList"></div>
+      </section>
+
+      <section class="card" id="history">
+        <h2>History</h2>
+        <p>Everything you copy from injex is kept so you can get back to it.</p>
+        <div class="opt-grid">
+          <label class="opt">
+            <input type="checkbox" id="histOn" />
+            <div><b>Record copies</b><span>Includes results of the right-click menu.</span></div>
+          </label>
+          <div class="field">
+            <label for="histLimit">Keep the last</label>
+            <div class="inline-row"><input type="number" id="histLimit" min="1" max="1000" /> <span class="muted small">entries</span></div>
+          </div>
+        </div>
+        <div class="row-actions" style="margin-top: 16px">
+          <button class="btn danger" id="histClear" type="button">Clear history</button>
+          <span class="hint" id="histCount"></span>
+        </div>
+      </section>
+
+      <section class="card" id="shortcuts">
+        <h2>Keyboard shortcuts</h2>
+        <p>Set or change them on Chrome’s shortcuts page.</p>
+        <dl class="meta" id="shortcutList"></dl>
+        <div class="row-actions" style="margin-top: 14px">
+          <button class="btn" id="shortcutsBtn" type="button">Edit shortcuts</button>
+        </div>
+      </section>
+
+      <section class="card" id="data">
+        <h2>Backup</h2>
+        <p>Favorites, options, alphabets and settings as JSON. The API key and history are left out unless you tick the box.</p>
+        <div class="row-actions">
+          <button class="btn" id="exportBtn" type="button">Export</button>
+          <button class="btn" id="importBtn" type="button">Import…</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden />
+          <label class="chk"><input type="checkbox" id="exportAll" /> Include API key and history</label>
+          <span class="spacer"></span>
+          <button class="btn danger" id="resetAll" type="button">Reset everything</button>
+        </div>
+        <small class="hint" id="dataMsg"></small>
+      </section>
+
+      <section class="card" id="about">
+        <h2>About</h2>
+        <p id="aboutText"></p>
+        <dl class="meta">
+          <dt>Transforms</dt>
+          <dd>Ported from <a href="https://github.com/elder-plinius/P4RS3LT0NGV3" target="_blank" rel="noopener">P4RS3LT0NGV3</a> by elder-plinius (AGPL-3.0)</dd>
+          <dt>Tokenizers</dt>
+          <dd><a href="https://github.com/niieani/gpt-tokenizer" target="_blank" rel="noopener">gpt-tokenizer</a> (MIT)</dd>
+          <dt>Codes</dt>
+          <dd>node-qrcode (MIT), JsBarcode (MIT), ZXing (Apache-2.0)</dd>
+          <dt>Fonts</dt>
+          <dd>Inter and JetBrains Mono (SIL OFL 1.1)</dd>
+          <dt>License</dt>
+          <dd>AGPL-3.0-or-later</dd>
+        </dl>
+      </section>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

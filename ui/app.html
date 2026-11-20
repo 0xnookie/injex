@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>injex</title>
+    <link rel="icon" href="../icons/icon32.png" />
+    <link rel="preload" href="../fonts/Inter.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="popup">
+    <header class="topbar">
+      <div class="brand">
+        <img src="../icons/logo.svg" alt="" width="24" height="24" />
+        <span>injex</span>
+      </div>
+      <span class="divider"></span>
+      <span id="status" class="status"></span>
+      <div class="actions">
+        <button id="btnScan" class="btn primary popup-only" title="Scan this page for hidden text: Unicode tags, emoji steganography, zero-width and bidi characters, homoglyphs, CSS-hidden text and comments">
+          <svg class="i" viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8" /><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8" /><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16" /><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" /><path d="M7.5 12h9" /></svg>
+          Scan page
+        </button>
+        <span class="divider popup-only"></span>
+        <button id="btnFull" class="btn icon ghost popup-only" title="Open the dashboard in a tab">
+          <svg class="i" viewBox="0 0 24 24"><path d="M14.5 4H20v5.5" /><path d="M9.5 20H4v-5.5" /><path d="M20 4l-6.5 6.5" /><path d="M4 20l6.5-6.5" /></svg>
+        </button>
+        <button id="btnOptions" class="btn icon ghost" title="Settings">
+          <svg class="i" viewBox="0 0 24 24"><path d="M4 7h9" /><path d="M18 7h2" /><circle cx="15.5" cy="7" r="2.3" /><path d="M4 17h3" /><path d="M12 17h8" /><circle cx="9.5" cy="17" r="2.3" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <div id="tabsBar" class="tabs-bar">
+      <nav id="tabs" class="tabs"></nav>
+      <button class="tab-scroll left" data-dir="-1" tabindex="-1" aria-hidden="true" title="Scroll tabs left">
+        <svg class="i" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" /></svg>
+      </button>
+      <button class="tab-scroll right" data-dir="1" tabindex="-1" aria-hidden="true" title="Scroll tabs right">
+        <svg class="i" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+    </div>
+
+    <div id="views">
+      <!-- ── Transform ── -->
+      <section class="view" data-view="transform">
+        <div class="io">
+          <textarea id="tIn" rows="3" spellcheck="false" placeholder="Type or paste text — every transform below updates as you type"></textarea>
+          <div class="io-meta">
+            <span class="stat" id="tStat"></span>
+            <span class="spacer"></span>
+            <button class="mini" id="tPaste">Paste</button>
+            <button class="mini" id="tClear">Clear</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="tFilter" placeholder="Filter transforms or /regex/" spellcheck="false" />
+          <select id="tCat" title="Category"><option value="">All categories</option></select>
+          <div class="seg" id="tDir" title="Encode the input, or decode it with every transform that can">
+            <button data-v="encode" class="on">Encode</button>
+            <button data-v="decode">Decode</button>
+          </div>
+          <label class="tgl" title="Only transforms you starred"><input type="checkbox" id="tFav" /> Favorites</label>
+          <span class="spacer"></span>
+          <span class="count" id="tCount"></span>
+        </div>
+        <main class="list" id="tList"></main>
+      </section>
+
+      <!-- ── Decode ── -->
+      <section class="view" data-view="decode">
+        <div class="io">
+          <textarea id="dIn" rows="3" spellcheck="false" placeholder="Paste anything encoded, ciphered or hiding something — it is decoded as you type"></textarea>
+          <div class="io-meta">
+            <span class="stat" id="dStat"></span>
+            <span class="spacer"></span>
+            <select id="dWith" title="Decoder"><option value="">Auto-detect</option></select>
+            <label class="tgl" title="Keep decoding while a confident decoder matches (Base64 → ROT13 → …)"><input type="checkbox" id="dPeel" checked /> Peel layers</label>
+            <button class="mini" id="dPaste">Paste</button>
+            <button class="mini" id="dClear">Clear</button>
+          </div>
+        </div>
+        <div id="dLang" class="banner" hidden></div>
+        <main class="list" id="dOut"></main>
+      </section>
+
+      <!-- ── Steganography ── -->
+      <section class="view" data-view="stego">
+        <div class="toolbar">
+          <div class="seg" id="sMode">
+            <button data-v="bits" class="on" title="One variation selector (VS15/VS16) per bit, after a carrier emoji — P4RS3LT0NGV3's scheme">Emoji · bits</button>
+            <button data-v="bytes" title="One variation selector (VS1–VS256) per byte — 8× shorter">Emoji · bytes</button>
+            <button data-v="tags" title="Every byte as an invisible Unicode tag character (U+E0000 + byte)">Invisible tags</button>
+          </div>
+          <span class="spacer"></span>
+          <span class="count" id="sMeta"></span>
+        </div>
+        <main class="list">
+          <div class="pane narrow">
+            <div class="card">
+              <div class="card-head"><b>Hide a message</b><span class="muted small" id="sModeHint"></span></div>
+              <textarea id="sMsg" rows="3" spellcheck="false" placeholder="The message to hide"></textarea>
+              <div id="sCarrierBox" style="margin-top: 10px">
+                <div class="inline-row">
+                  <span class="muted small">Carrier</span>
+                  <div class="carriers" id="sCarriers"></div>
+                  <input type="text" id="sCarrier" style="width: 64px; text-align: center" title="Any character or emoji" />
+                  <input type="search" id="sEmojiFilter" placeholder="Search emoji" style="flex: 1; min-width: 120px" />
+                </div>
+                <div class="emoji-grid" id="sGrid" style="margin-top: 8px" hidden></div>
+              </div>
+              <div class="card-head" style="margin: 12px 0 8px">
+                <b>Output</b>
+                <span class="muted small" id="sOutMeta"></span>
+                <span class="spacer"></span>
+                <button class="mini primary" id="sCopy">Copy</button>
+              </div>
+              <pre class="out" id="sOut" data-empty="Type a message above."></pre>
+            </div>
+            <div class="card">
+              <div class="card-head"><b>Reveal</b><span class="muted small">Paste text that may hide something; every scheme is tried.</span></div>
+              <textarea id="sDec" rows="2" spellcheck="false" placeholder="Paste a suspicious emoji, message or document"></textarea>
+              <div id="sReveal" style="margin-top: 10px"></div>
+            </div>
+          </div>
+        </main>
+      </section>
+
+      <!-- ── Hidden-text scanner ── -->
+      <section class="view" data-view="scan">
+        <div class="toolbar">
+          <div class="seg" id="scSrc">
+            <button data-v="page" class="on">This page</button>
+            <button data-v="text">Pasted text</button>
+          </div>
+          <button class="btn primary popup-only" id="scGo">
+            <svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5" /><path d="M20 4v4.5h-4.5" /></svg>
+            Scan
+          </button>
+          <select id="scSev" title="Minimum severity">
+            <option value="info">All severities</option>
+            <option value="medium">≥ Medium</option>
+            <option value="high">≥ High</option>
+            <option value="critical">Critical</option>
+          </select>
+          <label class="tgl" title="Only findings whose text reads like instructions to a model"><input type="checkbox" id="scInstr" /> Instructions</label>
+          <span class="spacer"></span>
+          <span class="count" id="scCount"></span>
+          <button class="btn icon" id="scCopy" title="Copy the findings as a Markdown report">
+            <svg class="i" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" /><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" /></svg>
+          </button>
+        </div>
+        <div class="banner" id="scBanner" hidden></div>
+        <div class="io" id="scTextWrap" hidden>
+          <textarea id="scText" rows="4" spellcheck="false" placeholder="Paste text (an e-mail, a document, a model answer…) to check it for hidden characters"></textarea>
+        </div>
+        <main class="list" id="scList"></main>
+      </section>
+
+      <!-- ── Tokenizer ── -->
+      <section class="view" data-view="tokens">
+        <div class="io">
+          <textarea id="kIn" rows="3" spellcheck="false" placeholder="Text to tokenize"></textarea>
+          <div class="io-meta">
+            <select id="kEngine" title="Tokenizer"></select>
+            <label class="tgl"><input type="checkbox" id="kIds" /> Token IDs</label>
+            <span class="spacer"></span>
+            <span class="stat" id="kStat"></span>
+          </div>
+        </div>
+        <main class="list" id="kOut"></main>
+      </section>
+
+      <!-- ── Splitter ── -->
+      <section class="view" data-view="split">
+        <div class="io">
+          <textarea id="pIn" rows="3" spellcheck="false" placeholder="Text to split into several messages"></textarea>
+        </div>
+        <div class="toolbar">
+          <select id="pMode" title="How to split"></select>
+          <span class="inline-row" id="pModeOpts"></span>
+          <span class="spacer"></span>
+          <label class="tgl" title="Copy all as one line instead of one message per line"><input type="checkbox" id="pOneLine" /> One line</label>
+          <button class="btn" id="pCopyAll">
+            <svg class="i" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" /><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" /></svg>
+            Copy all
+          </button>
+        </div>
+        <div class="toolbar">
+          <span class="muted small">Transform</span>
+          <span class="inline-row" id="pChain"></span>
+          <span class="muted small" style="margin-left: 6px">Wrap</span>
+          <select id="pWrapPreset" title="Wrap preset"></select>
+          <input type="text" id="pStart" class="mono" placeholder="start" style="width: 92px" title="Before each message; {n} = message number" />
+          <input type="text" id="pEnd" class="mono" placeholder="end" style="width: 92px" title="After each message; {n} = message number" />
+        </div>
+        <main class="list" id="pOut"></main>
+      </section>
+
+      <!-- ── Mutation Lab ── -->
+      <section class="view" data-view="mutate">
+        <div class="io">
+          <textarea id="mIn" rows="3" spellcheck="false" placeholder="A payload to mutate into many variants"></textarea>
+        </div>
+        <div class="toolbar">
+          <span class="inline-row" id="mToggles"></span>
+          <span class="spacer"></span>
+          <label class="muted small">Count <input type="number" id="mCount" min="1" max="500" value="20" /></label>
+          <input type="text" id="mSeed" class="mono" placeholder="seed" style="width: 80px" title="Same seed → same variants" />
+          <button class="btn primary" id="mGo">Generate</button>
+        </div>
+        <div class="toolbar" id="mBar" hidden>
+          <span class="count" id="mMeta"></span>
+          <span class="spacer"></span>
+          <button class="btn" id="mCopy">Copy all</button>
+          <button class="btn" id="mSave">Download .txt</button>
+        </div>
+        <main class="list" id="mOut"></main>
+      </section>
+
+      <!-- ── Tokenade ── -->
+      <section class="view" data-view="tokenade">
+        <main class="list">
+          <div class="pane narrow">
+            <div class="card">
+              <div class="card-head">
+                <b>Token bomb</b>
+                <span class="muted small">Nested emoji, variation selectors and zero-width noise that explode token counts.</span>
+              </div>
+              <div class="inline-row" style="margin-bottom: 12px">
+                <span class="muted small">Preset</span>
+                <div class="seg" id="bPreset"></div>
+              </div>
+              <div class="form" id="bForm"></div>
+              <div class="inline-row" style="margin-top: 12px">
+                <span class="muted small">Carrier</span>
+                <div class="carriers" id="bCarriers"></div>
+                <input type="text" id="bCarrier" style="width: 64px; text-align: center" />
+              </div>
+              <div class="row-actions" style="margin-top: 14px">
+                <button class="btn primary" id="bGo">Generate</button>
+                <span class="chip" id="bEst"></span>
+              </div>
+            </div>
+            <div class="card" id="bOutCard" hidden>
+              <div class="card-head">
+                <b>Output</b>
+                <span class="muted small" id="bOutMeta"></span>
+                <span class="spacer"></span>
+                <button class="mini primary" id="bCopy">Copy</button>
+                <button class="mini" id="bSave">Download</button>
+              </div>
+              <pre class="out" id="bOut"></pre>
+            </div>
+            <div class="card">
+              <div class="card-head"><b>Text payload</b><span class="muted small">A character repeated with combining marks and zero-width characters.</span></div>
+              <div class="inline-row">
+                <input type="text" id="xBase" value="A" style="width: 64px; text-align: center" title="Base character" />
+                <label class="muted small">× <input type="number" id="xRepeat" min="1" max="10000" value="100" /></label>
+                <label class="tgl"><input type="checkbox" id="xComb" checked /> Combining marks</label>
+                <label class="tgl"><input type="checkbox" id="xZW" /> Zero-width</label>
+                <span class="spacer"></span>
+                <button class="btn" id="xGo">Generate</button>
+                <button class="mini" id="xCopy" hidden>Copy</button>
+              </div>
+              <pre class="out" id="xOut" style="margin-top: 10px" hidden></pre>
+            </div>
+          </div>
+        </main>
+      </section>
+
+      <!-- ── Bijection ── -->
+      <section class="view" data-view="bijection">
+        <div class="io">
+          <textarea id="jIn" rows="2" spellcheck="false" placeholder="The message to teach in a made-up “alphapr” language"></textarea>
+        </div>
+        <div class="toolbar">
+          <select id="jType" title="Mapping"></select>
+          <label class="muted small" title="The first N characters (a, b, …) keep their own value">Fixed <input type="number" id="jFixed" min="0" max="10" value="2" /></label>
+          <label class="muted small" title="How many prompts (each with its own shuffled mapping)">Prompts <input type="number" id="jBudget" min="1" max="50" value="1" /></label>
+          <label class="tgl"><input type="checkbox" id="jEx" checked /> Example</label>
+          <span class="spacer"></span>
+          <button class="btn" id="jShuffle" title="Shuffle the mapping">Shuffle</button>
+          <button class="btn primary" id="jGo">Generate</button>
+        </div>
+        <main class="list" id="jOut"></main>
+      </section>
+
+      <!-- ── Gibberish ── -->
+      <section class="view" data-view="gibberish">
+        <div class="toolbar">
+          <div class="seg" id="gMode">
+            <button data-v="dict" class="on" title="Replace every word with a consistent random word and output the dictionary">Dictionary</button>
+            <button data-v="random" title="Drop random letters from each word, many variations">Random removal</button>
+            <button data-v="specific" title="Remove specific characters">Specific removal</button>
+          </div>
+          <span class="spacer"></span>
+          <span class="inline-row" id="gOpts"></span>
+        </div>
+        <div class="io">
+          <textarea id="gIn" rows="3" spellcheck="false" placeholder="Input text"></textarea>
+        </div>
+        <main class="list" id="gOut"></main>
+      </section>
+
+      <!-- ── Codes ── -->
+      <section class="view" data-view="codes">
+        <div class="toolbar">
+          <div class="seg" id="cMode">
+            <button data-v="make" class="on">Generate</button>
+            <button data-v="read">Decode image</button>
+          </div>
+          <span class="spacer"></span>
+          <span class="muted small">QR · Code 128 · EAN-13 · Code 39 — all offline</span>
+        </div>
+        <main class="list">
+          <div class="pane narrow" id="cMake">
+            <div class="card">
+              <textarea id="cIn" rows="2" spellcheck="false" placeholder="Text or number to encode"></textarea>
+              <div class="form" id="cForm" style="margin-top: 12px"></div>
+            </div>
+            <div class="card">
+              <div class="card-head"><b>Preview</b><span class="muted small" id="cMeta"></span><span class="spacer"></span><button class="mini primary" id="cSave">Download</button><button class="mini" id="cCopyImg">Copy image</button></div>
+              <div class="code-preview" id="cPreview"></div>
+            </div>
+          </div>
+          <div class="pane narrow" id="cRead" hidden>
+            <div class="drop" id="cDrop" tabindex="0">
+              <svg class="i" viewBox="0 0 24 24" style="width: 22px; height: 22px"><rect x="3.5" y="4" width="17" height="16" rx="2" /><circle cx="9" cy="10" r="1.8" /><path d="m20.5 16-5-5-8.5 9" /></svg>
+              <div>Drop or paste an image (Ctrl+V), or click to choose — PNG, JPEG, GIF, WebP</div>
+              <input type="file" id="cFile" accept="image/*" hidden />
+            </div>
+            <div id="cResult"></div>
+          </div>
+        </main>
+      </section>
+
+      <!-- ── Spelling alphabets ── -->
+      <section class="view" data-view="alphabets">
+        <main class="list">
+          <div class="pane narrow">
+            <div class="card">
+              <div class="card-head">
+                <b id="aTitle">New spelling alphabet</b>
+                <span class="muted small">One word per letter, like NATO. Saved alphabets become transforms (category Custom).</span>
+              </div>
+              <div class="inline-row" style="margin-bottom: 10px">
+                <input type="text" id="aName" placeholder="Name, e.g. Space Alphabet" style="flex: 1; min-width: 160px" />
+                <input type="text" id="aTheme" placeholder="Theme for AI, e.g. outer space" style="flex: 1; min-width: 160px" />
+                <button class="btn" id="aGen" title="Ask the model set in Settings for 26 themed words (OpenRouter)">
+                  <svg class="i" viewBox="0 0 24 24"><path d="M12 3.5 13.8 9l5.7.2-4.5 3.4 1.6 5.4L12 14.8 7.4 18l1.6-5.4L4.5 9.2l5.7-.2z" /></svg>
+                  Generate
+                </button>
+              </div>
+              <div class="alpha-grid" id="aGrid"></div>
+              <div class="row-actions" style="margin-top: 12px">
+                <button class="btn primary" id="aSave">Save alphabet</button>
+                <button class="btn ghost" id="aReset">Clear</button>
+                <span class="hint" id="aMsg"></span>
+              </div>
+            </div>
+            <div class="group">Saved alphabets <span class="n" id="aCount"></span></div>
+            <div id="aList"></div>
+          </div>
+        </main>
+      </section>
+
+      <!-- ── AI (OpenRouter) ── -->
+      <section class="view" data-view="ai">
+        <div class="toolbar">
+          <div class="seg" id="iMode">
+            <button data-v="promptcraft" class="on" title="Rewrite a prompt with a mutation strategy, several variants in parallel">PromptCraft</button>
+            <button data-v="anticlassifier" title="Syntactic rewrite of a prompt with an analysis of the substitutions">Anti-Classifier</button>
+            <button data-v="translate" title="Translate into a world, dead or constructed language">Translate</button>
+          </div>
+          <span class="spacer"></span>
+          <input type="text" id="iModel" class="mono" list="iModels" placeholder="model" style="width: 220px" title="OpenRouter model ID" />
+          <datalist id="iModels"></datalist>
+        </div>
+        <div id="iKeyBanner" class="banner" hidden>
+          <span>AI tools use your own OpenRouter API key. Add it in Settings; it stays in this browser and is only sent to openrouter.ai.</span>
+          <span class="spacer"></span>
+          <button class="mini" id="iKeyBtn">Open settings</button>
+        </div>
+        <div class="io">
+          <textarea id="iIn" rows="3" spellcheck="false" placeholder="Prompt or text"></textarea>
+          <div class="io-meta" id="iOpts"></div>
+        </div>
+        <main class="list" id="iOut"></main>
+      </section>
+
+      <!-- ── Library ── -->
+      <section class="view" data-view="library">
+        <div class="toolbar">
+          <div class="seg" id="lMode">
+            <button data-v="glitch" class="on" title="Glitch tokens: LLM vocabulary anomalies">Glitch tokens</button>
+            <button data-v="special" title="Chat-template and control tokens of popular model families">Special tokens</button>
+            <button data-v="ends" title="Delimiter / stop strings">End sequences</button>
+            <button data-v="chars" title="Invisible and control characters to copy">Invisible chars</button>
+          </div>
+          <input type="search" id="lFilter" placeholder="Filter or /regex/" spellcheck="false" />
+          <span class="spacer"></span>
+          <span class="count" id="lCount"></span>
+        </div>
+        <main class="list" id="lOut"></main>
+      </section>
+
+      <!-- ── History ── -->
+      <section class="view" data-view="history">
+        <div class="toolbar">
+          <input type="search" id="hFilter" placeholder="Filter or /regex/" spellcheck="false" />
+          <span class="spacer"></span>
+          <span class="count" id="hCount"></span>
+          <button class="btn danger" id="hClear">
+            <svg class="i" viewBox="0 0 24 24"><path d="M4 7h16" /><path d="M9.5 7V4.5h5V7" /><path d="M6.5 7l.9 12a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4l.9-12" /></svg>
+            Clear
+          </button>
+        </div>
+        <main class="list" id="hOut"></main>
+      </section>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

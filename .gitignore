@@ -1,0 +1,14 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# packaged builds and local output
+*.zip
+*.crx
+*.pem
+*.log
+node_modules/
+dist/
