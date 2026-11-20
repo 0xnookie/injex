@@ -1,5 +1,6 @@
-// Hidden-text scanner: the current page (all frames) or pasted text. Findings are ranked by severity and
-// flagged when the hidden text reads like instructions to a model.
+// Hidden-text scanner: the current page (all frames), pasted text, or a file (PDF, Word, text). A tab
+// showing a PDF is fetched and read as a PDF. Findings are ranked by severity and flagged when the
+// hidden text reads like instructions to a model.
 
 import { scanText, scanPage, collectPage, locateInPage, stripHidden, KINDS, SEVERITY_ORDER } from '../../src/core/scan.js';
 import { setScanBadge } from '../../src/core/badge.js';
@@ -8,9 +9,19 @@ import { $, h, icon, debounce, seg, empty, clip, row, mini, ago, keepDraft, setV
 
 let ctx;
 let src;
-let last = null; // { url, title, findings, chunks, frames, truncated, at, tabId, error }
+let last = null; // { url, title, findings, chunks, frames, truncated, at, tabId, error, doc, pdfAccess }
 let textFindings = [];
+let fileResult = null; // { name, size, findings, stats, warnings, error }
 const hasTabs = typeof chrome !== 'undefined' && !!chrome.scripting;
+const isPdfUrl = (url) => {
+  try {
+    const u = new URL(url);
+    return /^(https?|file):$/.test(u.protocol) && /\.pdf$/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+const docs = () => import('../../src/core/docs/index.js');
 
 function where(f) {
   if (!f.where) return '';
@@ -30,7 +41,8 @@ function findingRow(f, i) {
       h('span', { class: 'pill ' + sevClass(f.severity), text: f.severity }),
       h('span', { class: 'label', text: k.label }),
       f.instructions ? h('span', { class: 'chip bad', title: 'The hidden text reads like instructions to an AI model', text: 'instructions' }) : null,
-      h('span', { class: 'src', title: where(f), text: where(f) || f.note }),
+      // in documents the reason matters most: "white text on a white page · page 2"
+      h('span', { class: 'src', title: where(f), text: f.loc && f.note ? `${f.note} · ${where(f)}` : where(f) || f.note }),
       h('span', { class: 'spacer' }),
       f.payload ? mini('Copy', () => ctx.copy(f.payload, k.label), { iconName: 'copy', title: 'Copy the hidden text' }) : null,
     ],
@@ -38,7 +50,7 @@ function findingRow(f, i) {
     valueClass: f.payload ? '' : 'dim',
     detail: (box) => {
       if (k.desc) box.append(h('div', { class: 'desc', text: k.desc }));
-      if (f.ctx && f.kind !== 'css-hidden' && f.kind !== 'comment') box.append(h('div', { class: 'ctx' }, f.ctx.before, h('mark', { text: f.ctx.match }), f.ctx.after));
+      if (f.ctx && !['css-hidden', 'comment', 'doc-hidden', 'metadata', 'doc-comment'].includes(f.kind)) box.append(h('div', { class: 'ctx' }, f.ctx.before, h('mark', { text: f.ctx.match }), f.ctx.after));
       const meta = h('dl', { class: 'meta' });
       const add = (dt, dd) => dd !== undefined && dd !== '' && meta.append(h('dt', { text: dt }), h('dd', { text: String(dd) }));
       add('Found', f.note);
@@ -103,41 +115,74 @@ function filtered(findings) {
   return findings.filter((f) => SEVERITY_ORDER[f.severity] <= min && (!$('scInstr').checked || f.instructions));
 }
 
+/** "PDF, 3 pages, 412 of 2,180 characters hidden · OCR on page 1" */
+function docSummary(stats) {
+  if (!stats) return '';
+  const parts = [stats.type === 'pdf' ? `PDF, ${stats.pages} page${stats.pages === 1 ? '' : 's'}` : 'Word document'];
+  parts.push(`${stats.hiddenChars.toLocaleString()} of ${stats.chars.toLocaleString()} characters hidden`);
+  if (stats.ocrPages?.length) parts.push(`invisible OCR text layer on page${stats.ocrPages.length === 1 ? '' : 's'} ${stats.ocrPages.join(', ')} (normal for scans)`);
+  return parts.join(' · ');
+}
+
+function current() {
+  const s = src.get();
+  return s === 'text' ? textFindings : s === 'file' ? fileResult?.findings || [] : last?.findings || [];
+}
+
 function render() {
   const list = $('scList');
   list.textContent = '';
   const banner = $('scBanner');
   banner.hidden = true;
-  const isText = src.get() === 'text';
+  const mode = src.get();
+  const isText = mode === 'text';
+  const isFile = mode === 'file';
   $('scTextWrap').hidden = !isText;
+  $('scFileWrap').hidden = !isFile;
   $('scClean').hidden = !isText || !textFindings.length;
-  $('scGo').hidden = isText || (ctx.FULL && !(last?.tabId && hasTabs));
+  $('scGo').hidden = isText || isFile || (ctx.FULL && !(last?.tabId && hasTabs));
   $('scGo').classList.toggle('popup-only', !ctx.FULL || !last?.tabId);
 
-  const all = isText ? textFindings : last?.findings || [];
+  const all = current();
   const shown = filtered(all);
   $('scCount').textContent = all.length ? `${shown.length} of ${all.length}` : '';
+  const setBanner = (cls, ...nodes) => {
+    banner.hidden = false;
+    banner.className = 'banner ' + cls;
+    banner.textContent = '';
+    banner.append(...nodes.filter(Boolean));
+  };
 
-  if (!isText) {
+  if (isFile) {
+    if (!fileResult) {
+      list.append(empty('⌕', 'Check a file for hidden text', 'PDFs: white, background-coloured, transparent, tiny or invisible text, text off the page, clipped, covered by a shape or on a hidden layer. Word: hidden-formatted, white, transparent and tiny runs, tracked deletions, comments. Both: metadata that reads like instructions and every invisible-character check. Text files are scanned line by line.'));
+      return;
+    }
+    if (fileResult.loading) {
+      setBanner('', h('span', { text: `Reading ${fileResult.name}…` }));
+      return;
+    }
+    if (fileResult.error) setBanner('bad', h('span', { text: `${fileResult.name}: ${fileResult.error}` }));
+    else {
+      setBanner(all.some((f) => f.severity === 'critical' || f.severity === 'high') ? 'bad' : all.length ? '' : 'ok', h('span', { title: fileResult.name, text: `${fileResult.name} — ${fileResult.stats ? docSummary(fileResult.stats) : `${fileResult.lines.toLocaleString()} lines`}` }));
+      for (const w of fileResult.warnings || []) list.append(h('div', { class: 'hint', text: w }));
+    }
+    if (fileResult.error) return;
+  } else if (!isText) {
     if (last?.error) {
-      banner.hidden = false;
-      banner.className = 'banner bad';
-      banner.textContent = '';
-      banner.append(h('span', { text: `Could not scan ${last.url || 'this page'}: ${last.error}` }));
+      setBanner('bad', h('span', { text: `Could not scan ${last.url || 'this page'}: ${last.error}` }), h('span', { class: 'spacer' }), last.pdfAccess ? h('button', { class: 'mini primary', onclick: () => scanPdfTab(last.pdfAccess, true) }, `Allow ${new URL(last.pdfAccess.url).host || 'file'} and scan`) : null);
     } else if (last) {
-      banner.hidden = false;
-      banner.className = 'banner ' + (all.some((f) => f.severity === 'critical') ? 'bad' : all.length ? '' : 'ok');
-      banner.textContent = '';
-      banner.append(
-        h('span', { title: last.url, text: `${last.title || last.url} — ${last.chunks.toLocaleString()} suspicious chunk${last.chunks === 1 ? '' : 's'} in ${last.frames} frame${last.frames === 1 ? '' : 's'}${last.truncated ? ' (truncated)' : ''}` }),
+      setBanner(
+        all.some((f) => f.severity === 'critical') ? 'bad' : all.length ? '' : 'ok',
+        h('span', { title: last.url, text: `${last.title || last.url} — ${last.doc ? docSummary(last.doc) : `${last.chunks.toLocaleString()} suspicious chunk${last.chunks === 1 ? '' : 's'} in ${last.frames} frame${last.frames === 1 ? '' : 's'}${last.truncated ? ' (truncated)' : ''}`}` }),
         h('span', { class: 'spacer' }),
         h('span', { class: 'muted small', text: ago(last.at) }),
-        liveSiteButton(),
+        last.doc ? null : liveSiteButton(),
       );
     }
   }
 
-  if (!isText && !last) {
+  if (!isText && !isFile && !last) {
     list.append(
       empty(
         '⌕',
@@ -153,7 +198,7 @@ function render() {
     return;
   }
   if (!all.length) {
-    if (!last?.error || isText) list.append(empty('✓', 'Nothing hidden found', isText ? 'No invisible or deceptive characters in this text.' : 'No hidden text on this page (in the frames the extension can read).'));
+    if (!last?.error || isText || isFile) list.append(empty('✓', 'Nothing hidden found', isText ? 'No invisible or deceptive characters in this text.' : isFile ? 'No hidden text, instruction-like metadata or comments, and no invisible characters in this file.' : last?.doc ? 'No hidden text in this PDF.' : 'No hidden text on this page (in the frames the extension can read).'));
     return;
   }
   if (!shown.length) {
@@ -164,9 +209,70 @@ function render() {
 }
 
 function updateCount() {
-  const all = src.get() === 'text' ? textFindings : last?.findings || [];
+  const all = current();
   const crit = all.some((f) => f.severity === 'critical');
   ctx.setCount('scan', all.length || null, crit ? 'crit' : all.some((f) => f.severity === 'high') ? 'hot' : '');
+}
+
+/** A tab showing a PDF: fetch the file and read it (the browser's PDF viewer can't be scripted). */
+async function scanPdfTab(tab, askAccess = false) {
+  const url = tab.url;
+  try {
+    if (askAccess) {
+      // first await: still inside the click
+      const origin = /^file:/.test(url) ? 'file:///*' : new URL(url).origin + '/*';
+      if (!(await chrome.permissions.request({ origins: [origin] }))) throw new Error('access was not granted');
+    }
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const { scanDocument } = await docs();
+    const d = await scanDocument(bytes, url);
+    last = { url, title: tab.title || url.split('/').pop(), findings: d.findings, doc: d.stats, warnings: d.warnings, chunks: 0, frames: 0, at: Date.now(), tabId: tab.id };
+    chrome.storage.session?.set({ lastScan: last, ['scan:' + tab.id]: last });
+    setScanBadge(tab.id, last.findings);
+  } catch (e) {
+    const denied = /Failed to fetch|NetworkError|not granted|CORS/i.test(String(e.message || e));
+    last = {
+      url,
+      error: /^file:/.test(url) && denied ? 'local PDFs need “Allow access to file URLs” in the extension’s details — or open the File tab and drop the PDF there' : denied && !askAccess ? 'the extension needs permission to download this PDF' : String(e.message || e),
+      pdfAccess: denied && !askAccess && !/^file:/.test(url) ? { url, title: tab.title, id: tab.id } : null,
+      findings: [],
+      chunks: 0,
+      frames: 0,
+      at: Date.now(),
+    };
+  }
+  render();
+  updateCount();
+}
+
+/** Scan a dropped / chosen file: PDF and Word as documents, anything else line by line as text. */
+async function scanFile(file) {
+  if (!file) return;
+  src.set('file', false);
+  fileResult = { name: file.name, size: file.size, findings: [], loading: true };
+  render();
+  try {
+    if (file.size > 100 * 1024 * 1024) throw new Error('larger than 100 MB');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const { scanDocument, documentType } = await docs();
+    if (documentType(bytes, file.name)) {
+      const d = await scanDocument(bytes, file.name);
+      fileResult = { name: file.name, size: file.size, findings: d.findings, stats: d.stats, warnings: d.warnings };
+    } else {
+      if (bytes.subarray(0, 8000).includes(0)) throw new Error('a binary file — PDF, Word (.docx) and text files can be checked');
+      const text = new TextDecoder().decode(bytes);
+      const { scanFileText } = await import('../../src/core/filescan.js');
+      const findings = scanFileText(text, { file: file.name }).map((f) => ({ ...f, where: `line ${f.line}, column ${f.column}` }));
+      findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+      fileResult = { name: file.name, size: file.size, findings, lines: text.split('\n').length };
+    }
+  } catch (e) {
+    fileResult = { name: file.name, size: file.size, findings: [], error: e.message || String(e) };
+  }
+  render();
+  updateCount();
 }
 
 async function scanPageNow() {
@@ -181,6 +287,10 @@ async function scanPageNow() {
     } else {
       const tabId = ctx.FULL && last?.tabId ? last.tabId : (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id;
       const tab = await chrome.tabs.get(tabId);
+      if (isPdfUrl(tab.url)) {
+        busy(btn, false);
+        return scanPdfTab(tab);
+      }
       let results;
       try {
         results = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, func: collectPage });
@@ -218,12 +328,13 @@ function scanTextNow() {
 }
 
 function report() {
-  const isText = src.get() === 'text';
-  const all = filtered(isText ? textFindings : last?.findings || []);
+  const mode = src.get();
+  const all = filtered(current());
   if (!all.length) return ctx.toast('No findings to copy', true);
   const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').slice(0, 300);
   const lines = ['# injex hidden-text scan', ''];
-  if (!isText && last) lines.push(`- Page: ${last.title ? `${last.title} — ` : ''}${last.url}`, `- Scanned: ${new Date(last.at).toISOString()}`, '');
+  if (mode === 'page' && last) lines.push(`- Page: ${last.title ? `${last.title} — ` : ''}${last.url}`, `- Scanned: ${new Date(last.at).toISOString()}`, '');
+  if (mode === 'file' && fileResult) lines.push(`- File: ${fileResult.name}${fileResult.stats ? ` (${docSummary(fileResult.stats)})` : ''}`, `- Scanned: ${new Date().toISOString()}`, '');
   lines.push('| Severity | Kind | Where | Hidden text |', '|---|---|---|---|');
   for (const f of all) lines.push(`| ${f.severity}${f.instructions ? ' ⚠ instructions' : ''} | ${KINDS[f.kind]?.label || f.kind} | ${esc(where(f) || f.note)} | ${esc(f.payload || f.ctx?.match || f.note)} |`);
   ctx.copy(lines.join('\n'), 'Scan report');
@@ -235,6 +346,23 @@ export async function init(c) {
     render();
     updateCount();
     if (src.get() === 'text') $('scText').focus();
+  });
+  const drop = $('scDrop');
+  drop.addEventListener('click', () => $('scFile').click());
+  drop.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && $('scFile').click());
+  $('scFile').addEventListener('change', (e) => {
+    scanFile(e.target.files[0]);
+    e.target.value = '';
+  });
+  drop.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    drop.classList.add('over');
+  });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    scanFile(e.dataTransfer.files[0]);
   });
   $('scGo').addEventListener('click', scanPageNow);
   $('scSev').addEventListener('change', render);

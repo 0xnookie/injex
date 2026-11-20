@@ -15,12 +15,16 @@ export function safe(s) {
 
 const one = (s, max) => safe(visualize(String(s ?? '').replace(/\s+/g, ' ').trim(), max));
 
-/** One-line description of a finding. */
-export function message(f, max = 120) {
-  if (f.payload) return `${f.note}: “${one(f.payload, max)}”${f.instructions ? ' — reads like instructions to a model' : ''}`;
+/** One-line description of a finding (`where` adds the place inside a document: "page 2"). */
+export function message(f, max = 120, { where = false } = {}) {
+  const note = where && f.where ? `${f.note} (${safe(f.where)})` : f.note;
+  if (f.payload) return `${note}: “${one(f.payload, max)}”${f.instructions ? ' — reads like instructions to a model' : ''}`;
   const ctx = f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '';
-  return ctx ? `${f.note} in “${safe(ctx.replace(/\s+/g, ' ').trim())}”` : f.note;
+  return ctx ? `${note} in “${safe(ctx.replace(/\s+/g, ' ').trim())}”` : note;
 }
+
+/** "12:5" in a text file, "p.2" / "¶14" / "meta" in a document. */
+export const locOf = (f) => (f.loc ? safe(f.loc) : `${f.line}:${f.column}`);
 
 export function countBySeverity(findings) {
   const out = {};
@@ -39,14 +43,15 @@ export function formatText(result, { color = false, quiet = false } = {}) {
   const out = [];
   const all = result.files.flatMap((f) => f.findings);
   if (!quiet) {
-    for (const { file, findings } of result.files) {
-      if (!findings.length) continue;
+    for (const { file, findings, warnings = [] } of result.files) {
+      if (!findings.length && !warnings.length) continue;
       out.push(c('bold', safe(file)));
+      for (const w of warnings) out.push(c('dim', `  ! ${safe(w)}`));
       const shown = findings.slice(0, 50);
-      const width = Math.max(...shown.map((f) => `${f.line}:${f.column}`.length));
+      const width = Math.max(0, ...shown.map((f) => locOf(f).length));
       for (const f of shown) {
         const label = KINDS[f.kind]?.label || f.kind;
-        out.push(`  ${c('dim', `${f.line}:${f.column}`.padEnd(width))}  ${c(f.severity, f.severity.padEnd(8))}  ${label.padEnd(19)} ${message(f)}`);
+        out.push(`  ${c('dim', locOf(f).padEnd(width))}  ${c(f.severity, f.severity.padEnd(8))}  ${label.padEnd(19)} ${message(f)}`);
       }
       if (findings.length > shown.length) out.push(c('dim', `  … ${findings.length - shown.length} more in this file (use --format json for all)`));
       out.push('');
@@ -70,7 +75,7 @@ export function formatText(result, { color = false, quiet = false } = {}) {
 
 export function formatJson(result, version) {
   const findings = result.files.flatMap(({ file, findings }) =>
-    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, kind: f.kind, label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '' })),
+    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, ...(f.loc ? { location: f.loc, where: f.where } : {}), kind: f.kind, label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '' })),
   );
   return JSON.stringify({ tool: 'injex', version, scanned: result.scanned, skipped: result.skipped, failOn: result.failOn, failing: result.failing, summary: countBySeverity(findings), findings }, null, 2) + '\n';
 }
@@ -94,7 +99,7 @@ export function formatSarif(result, version) {
       ruleId: 'injex/' + f.kind,
       ruleIndex: Math.max(0, kinds.indexOf(f.kind)),
       level: LEVEL[f.severity] || 'warning',
-      message: { text: `${KINDS[f.kind]?.label || f.kind} (${f.severity}): ${message(f, 300)}` },
+      message: { text: `${KINDS[f.kind]?.label || f.kind} (${f.severity}): ${message(f, 300, { where: true })}` },
       locations: [{ physicalLocation: { artifactLocation: { uri: encodeURI(file), uriBaseId: '%SRCROOT%' }, region: { startLine: f.line, startColumn: f.column, endColumn: Math.max(f.endColumn || f.column + 1, f.column + 1) } } }],
       properties: { severity: f.severity, instructions: !!f.instructions, count: f.count },
     })),
@@ -124,7 +129,7 @@ export function formatGithub(result) {
   for (const { file, findings } of result.files) {
     for (const f of findings) {
       const props = [`file=${escProp(file)}`, `line=${f.line}`, `col=${f.column}`, f.endColumn ? `endColumn=${f.endColumn}` : '', `title=${escProp(`injex: ${KINDS[f.kind]?.label || f.kind} (${f.severity})`)}`].filter(Boolean).join(',');
-      lines.push(`::${COMMAND[f.severity] || 'warning'} ${props}::${escData(message(f, 200))}`);
+      lines.push(`::${COMMAND[f.severity] || 'warning'} ${props}::${escData(message(f, 200, { where: true }))}`);
     }
   }
   return lines.join('\n') + (lines.length ? '\n' : '');

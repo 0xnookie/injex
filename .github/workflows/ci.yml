@@ -21,7 +21,7 @@ jobs:
       - name: Syntax-check all sources (as ES modules)
         run: |
           set -e
-          for f in src/*.js src/core/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs; do
+          for f in src/*.js src/core/*.js src/core/docs/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs; do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
 

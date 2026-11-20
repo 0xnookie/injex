@@ -2,10 +2,11 @@
 // injex on the command line: scan files for hidden text (for CI), clean them, decode / encode, inspect
 // characters and compare texts. Uses the extension's own modules; no dependencies. Node 20+.
 
-import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, statSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { expandPaths, readText, readIgnoreFile, toRel } from './files.mjs';
-import { scanFileText } from './scan-files.mjs';
+import { scanFileText } from '../src/core/filescan.js';
+import { scanDocument, DOC_EXT } from '../src/core/docs/index.js';
 import { formatText, formatJson, formatSarif, formatGithub, githubSummary, safe, SEVERITIES } from './report.mjs';
 
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
@@ -13,13 +14,15 @@ const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 const HELP = `injex ${VERSION} — find, remove and decode hidden text
 
 Usage
-  injex scan [paths…]            scan files and folders for hidden text (default: .)
+  injex scan [paths…]            scan files and folders for hidden text (default: .), PDF and Word too
   injex clean [paths…]           remove hidden characters (stdin → stdout without paths)
   injex decode [text]            universal decoder: peels Base64 / ROT13 / hex / tags … layers
   injex encode <t1,t2…> [text]   encode with one or more transforms (see injex list)
   injex list [filter]            list the transforms
   injex inspect [text]           every character: code point, name, category, script, flags
   injex diff <a> <b>             compare two files code point by code point
+  injex mcp [--root <dir>]       MCP server on stdio: scan / clean / decode / encode / inspect / compare
+                                 tools for AI agents (files limited to the working directory and --root)
 
 Text arguments can be left out to read stdin.
 
@@ -30,7 +33,9 @@ scan options
   --sarif <file>      also write a SARIF report (for GitHub code scanning)
   --output <file>     write the report to a file instead of stdout
   --exclude <glob>    skip matching paths (repeatable); .injexignore in the current folder adds more
-  --max-size <bytes>  skip larger files (default 2 MB)
+  --max-size <bytes>  skip larger text files (default 2 MB)
+  --max-doc-size <b>  skip larger PDF / Word files (default 50 MB)
+  --no-docs           don't open PDF and Word files (they are checked for hidden text by default)
   --no-git            walk folders instead of asking git which files belong to the project
   --quiet             only the summary line (text format)
 
@@ -79,6 +84,8 @@ async function cmdScan(argv) {
       output: { type: 'string' },
       exclude: { type: 'string', multiple: true, default: [] },
       'max-size': { type: 'string', default: String(2 * 1024 * 1024) },
+      'max-doc-size': { type: 'string', default: String(50 * 1024 * 1024) },
+      'no-docs': { type: 'boolean', default: false },
       'no-git': { type: 'boolean', default: false },
       quiet: { type: 'boolean', default: false },
     },
@@ -101,14 +108,38 @@ async function cmdScan(argv) {
     const { files, ignored, missing } = expandPaths(positionals, { exclude, git: !o['no-git'] });
     if (missing.length) fail(`not found: ${missing.join(', ')}`);
     result.skipped.ignored = ignored;
+    const maxDoc = Number(o['max-doc-size']);
     for (const abs of files) {
+      const file = toRel(abs);
+      if (DOC_EXT.test(abs) && !o['no-docs']) {
+        // PDF / Word: hidden text the reader can't see, metadata, comments
+        let bytes;
+        try {
+          if (statSync(abs).size > maxDoc) {
+            result.skipped.large++;
+            continue;
+          }
+          bytes = readFileSync(abs);
+        } catch {
+          result.skipped.unreadable++;
+          continue;
+        }
+        try {
+          const d = await scanDocument(bytes, abs);
+          result.scanned++;
+          result.files.push({ file, findings: d.findings.map((f) => ({ ...f, line: 1, column: 1, loc: f.loc || 'doc' })), warnings: d.warnings });
+        } catch (e) {
+          result.skipped.unreadable++;
+          result.files.push({ file, findings: [], warnings: [`could not read: ${e.message}`] });
+        }
+        continue;
+      }
       const r = readText(abs, maxSize);
       if (r.skip) {
         result.skipped[r.skip]++;
         continue;
       }
       result.scanned++;
-      const file = toRel(abs);
       result.files.push({ file, findings: scanFileText(r.text, { file }) });
     }
   }
@@ -335,9 +366,18 @@ async function cmdDiff(argv) {
   return 1;
 }
 
+// ── MCP server ──
+
+async function cmdMcp(argv) {
+  const { values: o } = parseArgs({ args: argv, options: { root: { type: 'string', multiple: true, default: [] } } });
+  const { serveStdio } = await import('./mcp.mjs');
+  await serveStdio({ version: VERSION, roots: [process.cwd(), ...o.root] });
+  return 0;
+}
+
 // ── main ──
 
-const COMMANDS = { scan: cmdScan, clean: cmdClean, decode: cmdDecode, encode: cmdEncode, list: cmdList, inspect: cmdInspect, diff: cmdDiff };
+const COMMANDS = { scan: cmdScan, clean: cmdClean, decode: cmdDecode, encode: cmdEncode, list: cmdList, inspect: cmdInspect, diff: cmdDiff, mcp: cmdMcp };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

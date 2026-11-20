@@ -1,0 +1,25 @@
+# pre-commit (https://pre-commit.com) hooks. In a project's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/0xnookie/injex
+#       rev: v1.3.0
+#       hooks:
+#         - id: injex            # fail the commit on hidden text
+#         # - id: injex-clean    # or remove hidden characters from the staged files
+#
+# Both respect a .injexignore file.
+
+- id: injex
+  name: injex (hidden text)
+  description: Find hidden text — Unicode tags, emoji steganography, zero-width, bidi and blank characters, look-alike letters, instruction-like hidden comments, and hidden text in PDF and Word files.
+  entry: injex scan --fail-on high
+  language: node
+  minimum_pre_commit_version: '3.0.0'
+
+- id: injex-clean
+  name: injex clean (remove hidden characters)
+  description: Remove hidden characters and fix look-alike letters in text files (keeps emoji sequences, flag emoji and joiners in non-Latin words).
+  entry: injex clean --write
+  language: node
+  types: [text]
+  minimum_pre_commit_version: '3.0.0'

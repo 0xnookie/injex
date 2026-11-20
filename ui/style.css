@@ -1793,6 +1793,18 @@ body.full .compare-io {
   cursor: pointer;
 }
 
+.drop.slim {
+  min-height: 72px;
+  grid-auto-flow: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.drop b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
 .drop.over {
   color: var(--text);
   border-color: var(--text);

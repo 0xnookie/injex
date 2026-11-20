@@ -2,7 +2,7 @@
 // checks (so findings get a line and column), and in Markdown / HTML files, comments that don't
 // render but read like instructions to a model are reported too.
 
-import { scanText, looksLikeInstructions } from '../src/core/scan.js';
+import { scanText, looksLikeInstructions } from './scan.js';
 
 // cheap pre-filter: lines without any of these can't produce a finding
 const QUICK = /[\u{200B}-\u{200F}\u{202A}-\u{202E}\u{2060}-\u{2064}\u{2066}-\u{2069}\u{FEFF}\u{180E}\u{034F}\u{061C}\u{FE00}-\u{FE0F}\u{115F}\u{1160}\u{3164}\u{FFA0}\u{E0000}-\u{E01EF}]|[A-Za-z][\u{0370}-\u{03FF}\u{0400}-\u{04FF}]|[\u{0370}-\u{03FF}\u{0400}-\u{04FF}][A-Za-z]/u;

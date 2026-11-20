@@ -17,6 +17,7 @@ import { peel, universalDecode, englishness } from './core/decoder.js';
 import { encodeEmojiBits, encodeTags } from './core/stego.js';
 import { collectPage, scanPage, stripHidden, checkPaste } from './core/scan.js';
 import { setScanBadge } from './core/badge.js';
+import { scanDocument } from './core/docs/index.js';
 import { liveScanAllowed, matchPatterns } from './core/sites.js';
 import { captureSelection, applyResult, watchPage } from './page.js';
 import * as store from './core/store.js';
@@ -163,8 +164,29 @@ async function doClean(tab, frameId, selectionText) {
   return show(tab.id, fid, { title: 'Cleaned', sub, result: r.text, replace: sel.editable });
 }
 
+const isPdfUrl = (url) => {
+  try {
+    const u = new URL(url);
+    return /^(https?|file):$/.test(u.protocol) && /\.pdf$/i.test(u.pathname);
+  } catch {
+    return false;
+  }
+};
+
+/** A tab showing a PDF: download it (activeTab or the live-scan permission allows that) and read it. */
+async function runPdfScan(tab) {
+  const res = await fetch(tab.url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const d = await scanDocument(new Uint8Array(await res.arrayBuffer()), tab.url);
+  const scan = { url: tab.url, title: tab.title || tab.url.split('/').pop(), findings: d.findings, doc: d.stats, warnings: d.warnings, chunks: 0, frames: 0, at: Date.now(), tabId: tab.id };
+  await chrome.storage.session.set({ ['scan:' + tab.id]: scan });
+  await setScanBadge(tab.id, d.findings);
+  return scan;
+}
+
 /** Collect the tab (all frames it allows) and scan it. Throws when the page can't be scripted. */
 async function runScan(tab) {
+  if (isPdfUrl(tab.url)) return runPdfScan(tab);
   const s = await loadPrefs();
   let results;
   try {
@@ -215,7 +237,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
     if (!(await liveScanFor(tab.url))) return;
     await runScan(tab);
     // pages keep adding text (chats, mail, feeds): rescan when it settles
-    await chrome.scripting.executeScript({ target: { tabId }, func: watchPage });
+    if (!isPdfUrl(tab.url)) await chrome.scripting.executeScript({ target: { tabId }, func: watchPage });
   } catch {
     /* pages that can't be scripted (web stores, PDFs, error pages) */
   }

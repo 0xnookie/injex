@@ -5,6 +5,31 @@ All notable changes to **injex** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] — 2026-11-20
+
+### Added
+- **Hidden text in PDF and Word files.** A PDF reader (incremental updates, object streams, Flate / LZW /
+  ASCII85 / ASCIIHex / RunLength, PNG predictors, ToUnicode CMaps and font encodings, a content-stream
+  interpreter with colour, transparency, clipping, optional content and form XObjects) and a Word reader
+  (styles, highlights, page colour, text boxes, headers, footers, notes) report text a reader can't see:
+  white or background-coloured, transparent, sub-point, invisible (render mode 3), squeezed, off the page,
+  clipped, covered by a shape drawn on top, on a hidden layer, or formatted as hidden — with the reason —
+  plus tracked deletions, metadata and comments / annotations that read like instructions, and every
+  invisible-character check on all text. An OCR layer over a scanned page is recognised as normal.
+  Encrypted PDFs are reported, not read. In the extension: **Scan → File** (drop a PDF, .docx or text
+  file), and a tab showing a PDF is downloaded and read as a PDF — by *Scan page* and by live scan. In the
+  CLI, `injex scan` reads PDF and Word files (`--no-docs`, `--max-doc-size`); locations are `p.N` / `¶N`.
+- **MCP server: `injex mcp`.** Model Context Protocol over stdio with eight read-only tools — `scan_text`,
+  `scan_files` (files, folders, PDF and Word documents under the working directory and `--root`),
+  `clean_text`, `decode`, `encode`, `list_transforms`, `inspect_text`, `compare_texts`. Hidden text in
+  results is labelled as untrusted data.
+- **pre-commit hooks** (`.pre-commit-hooks.yaml`): `injex` fails the commit on hidden text, `injex-clean`
+  strips hidden characters from staged text files.
+
+### Changed
+- The paste guard was verified with real pastes in Firefox as well as Chrome.
+- package.json lists only what the CLI needs and gains keywords, homepage and bugs links.
+
 ## [1.2.0] — 2026-11-20
 
 ### Added
@@ -107,6 +132,7 @@ dashboard and a right-click menu.
   context-menu transform picker, history, keyboard shortcuts, backup / restore.
 - Node test suite (`node test/run-tests.mjs`) and CI.
 
+[1.3.0]: https://github.com/0xnookie/injex/releases/tag/v1.3.0
 [1.2.0]: https://github.com/0xnookie/injex/releases/tag/v1.2.0
 [1.1.0]: https://github.com/0xnookie/injex/releases/tag/v1.1.0
 [1.0.0]: https://github.com/0xnookie/injex/releases/tag/v1.0.0

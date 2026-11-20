@@ -137,6 +137,7 @@
           <div class="seg" id="scSrc">
             <button data-v="page" class="on">This page</button>
             <button data-v="text">Pasted text</button>
+            <button data-v="file" title="A PDF, Word (.docx) or text file: hidden text, metadata, comments">File</button>
           </div>
           <button class="btn primary popup-only" id="scGo">
             <svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5" /><path d="M20 4v4.5h-4.5" /></svg>
@@ -158,6 +159,13 @@
         <div class="banner" id="scBanner" hidden></div>
         <div class="io" id="scTextWrap" hidden>
           <textarea id="scText" rows="4" spellcheck="false" placeholder="Paste text (an e-mail, a document, a model answer…) to check it for hidden characters"></textarea>
+        </div>
+        <div class="io" id="scFileWrap" hidden>
+          <div class="drop slim" id="scDrop" tabindex="0">
+            <svg class="i" viewBox="0 0 24 24" style="width: 20px; height: 20px"><path d="M7 3.5h7l4.5 4.5v12.5H7z" /><path d="M14 3.5V8h4.5" /><path d="M9.5 13h6M9.5 16.5h4" /></svg>
+            <div>Drop a <b>PDF</b>, <b>Word (.docx)</b> or text file, or click to choose — read locally, nothing is uploaded</div>
+            <input type="file" id="scFile" hidden />
+          </div>
         </div>
         <main class="list" id="scList"></main>
       </section>

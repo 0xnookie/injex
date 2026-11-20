@@ -25,6 +25,9 @@ export const KINDS = {
   filler: { label: 'Invisible letters', short: 'FILLER', desc: 'Hangul fillers and similar characters that render blank but count as letters: invisible identifiers in code (the "invisible backdoor") or invisible padding in text.' },
   'css-hidden': { label: 'CSS-hidden text', short: 'HIDDEN', desc: 'Text in the page that CSS hides from view (display:none, zero size, transparent, clipped or off-screen) but that is still in the DOM — and in what an AI agent or summarizer reads.' },
   comment: { label: 'HTML comment', short: 'COMMENT', desc: 'Sentence-like text in an HTML comment: invisible on the page, present in the source.' },
+  'doc-hidden': { label: 'Hidden in document', short: 'DOC', desc: 'Text in a PDF or Word file that a reader can’t see — white or background-coloured, transparent, tiny, invisible, off the page, clipped, covered by a shape, on a hidden layer or formatted as hidden — but that text extraction, and every AI tool reading the file, gets.' },
+  metadata: { label: 'Metadata', short: 'META', desc: 'A document property (title, subject, keywords, description, custom field …) that reads like instructions: never shown on the page, often passed to models with the text.' },
+  'doc-comment': { label: 'Comment', short: 'NOTE', desc: 'A comment or annotation in the document that reads like instructions to a model.' },
 };
 
 export const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };

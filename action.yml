@@ -1,5 +1,5 @@
 name: injex hidden-text scan
-description: Fail the build when files hide text from reviewers — Unicode tags, emoji steganography, zero-width, bidi and blank characters, look-alike letters, instruction-like hidden comments.
+description: Fail the build when code, docs, PDFs or Word files hide text from reviewers — invisible Unicode, look-alikes, hidden comments, white or tiny text.
 author: 0xnookie
 branding:
   icon: eye-off
