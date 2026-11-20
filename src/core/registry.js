@@ -1,4 +1,4 @@
-// Transform registry: wires the P4RS3LT0NGV3 transform modules into one keyed table, adds categories,
+// Transform registry: wires the transform modules into one keyed table, adds categories,
 // option handling and safe encode / decode wrappers. Pure JavaScript: works in extension pages, the
 // service worker and Node (tests).
 
@@ -41,6 +41,7 @@ export const CATEGORIES = {
   signwriting: { label: 'SignWriting', short: 'SIGN', desc: 'Sign-language fingerspelling and lip-reading notation' },
   special: { label: 'Special', short: 'MIX', desc: 'Random Mix: chains random transforms per word' },
   custom: { label: 'Custom', short: 'CUSTOM', desc: 'Your own spelling alphabets (Alphabets tab)' },
+  recipe: { label: 'Recipes', short: 'RECIPE', desc: 'Your saved chains of transforms (Transform tab → Recipe)' },
 };
 export const CATEGORY_ORDER = Object.keys(CATEGORIES);
 
@@ -200,6 +201,65 @@ export function setCustomAlphabets(alphabets) {
     const t = makeSpellingTransform(a);
     t.key = 'custom_' + slug(a.name);
     t.category = 'custom';
+    t.custom = true;
+    transforms[t.key] = t;
+  }
+  setRecipes(currentRecipes); // recipes may use the alphabets
+}
+
+// ── recipes: saved chains of transforms ──
+
+let currentRecipes = [];
+
+/** Steps of a recipe that exist (recipes can't contain recipes). */
+export function recipeSteps(recipe) {
+  return (recipe?.steps || []).filter((k) => transforms[k] && transforms[k].category !== 'recipe');
+}
+
+/**
+ * A recipe ({ name, steps: [transform keys] }) as a transformer: encodes through every step in order
+ * (each with the user's saved options) and decodes in reverse order when every step can decode.
+ */
+export function makeRecipeTransform(recipe) {
+  const steps = recipeSteps(recipe);
+  return new BaseTransformer({
+    name: recipe.name,
+    description: 'Recipe: ' + (steps.map((k) => transforms[k].name).join(' → ') || 'empty'),
+    priority: 30,
+    canDecode: steps.length > 0 && steps.every((k) => canDecode(transforms[k])),
+    steps,
+    func(text) {
+      let s = text;
+      for (const k of steps) {
+        const r = encode(k, s);
+        if (!r.ok) throw new Error(`${transforms[k]?.name || k}: ${r.error}`);
+        s = r.text;
+      }
+      return s;
+    },
+    reverse(text) {
+      let s = text;
+      for (const k of [...steps].reverse()) {
+        const r = decode(k, s);
+        if (!r.ok) throw new Error(`${transforms[k]?.name || k}: ${r.error}`);
+        s = r.text;
+      }
+      return s;
+    },
+  });
+}
+
+/** Replace all recipes with `recipes` ([{ name, steps }]). */
+export function setRecipes(recipes) {
+  currentRecipes = Array.isArray(recipes) ? recipes : [];
+  for (const [k, t] of Object.entries(transforms)) if (t.category === 'recipe') delete transforms[k];
+  for (const r of currentRecipes) {
+    // a recipe with a missing step (a deleted alphabet) would silently produce something else: skip it
+    const steps = recipeSteps(r);
+    if (!r?.name || !steps.length || steps.length !== r.steps.length) continue;
+    const t = makeRecipeTransform(r);
+    t.key = 'recipe_' + slug(r.name);
+    t.category = 'recipe';
     t.custom = true;
     transforms[t.key] = t;
   }

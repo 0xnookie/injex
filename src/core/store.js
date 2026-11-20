@@ -17,6 +17,8 @@ export const DEFAULTS = {
   },
   stegoCarrier: '🐍',
   customAlphabets: [], // [{ name, theme, words: [26] }]
+  recipes: [], // [{ name, steps: [transform keys] }]
+  autoScan: false, // live scan of every page (needs the optional host permission)
   history: [], // [{ text, source, at }]
   historyEnabled: true,
   historyLimit: 100,

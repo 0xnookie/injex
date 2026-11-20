@@ -1,7 +1,7 @@
 // Hidden-text scanner: finds text a human doesn't see but a model (or a copy-paste) does.
 //
 //  tags        Unicode Tags block (U+E0000–E007F) — invisible ASCII, the classic hidden prompt injection
-//  vs-bits     long runs of VS15/VS16 after a character — emoji steganography (P4RS3LT0NGV3 scheme)
+//  vs-bits     long runs of VS15/VS16 after a character — emoji steganography (bits scheme)
 //  vs-bytes    runs of variation selectors VS1–VS256 — one byte per selector ("emoji smuggling")
 //  zero-width  runs of zero-width characters (ZWSP, ZWNJ, ZWJ, WJ, BOM …) — zero-width steganography
 //  bidi        bidirectional overrides / isolates — text that renders in a different order ("Trojan Source")
@@ -390,6 +390,56 @@ export function collectPage() {
     }
   }
   return { url: location.href, title: document.title, chunks, truncated };
+}
+
+// ── cleaning ──
+
+// Latin look-alikes from Cyrillic and Greek, only applied inside words that mix scripts
+const CONFUSABLES = {
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ј: 'j', ѕ: 's', ԁ: 'd', һ: 'h', ӏ: 'l', ԛ: 'q', ԝ: 'w', ь: 'b',
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X', У: 'Y', І: 'I', Ј: 'J', Ѕ: 'S',
+  Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X', ο: 'o', ϲ: 'c', Ϲ: 'C',
+};
+
+/**
+ * Remove what a reader can't see and fix look-alike letters:
+ * Unicode tags, runs of variation selectors (single VS15/VS16 after a character stay), zero-width
+ * characters (a ZWJ inside an emoji sequence and a ZWNJ between non-Latin letters stay), invisible
+ * operators, BOM, soft hyphens, bidi embeddings / overrides / isolates, and Cyrillic / Greek letters
+ * inside words that also contain Latin ones.
+ * @returns {{ text: string, removed: number, replaced: number }}
+ */
+export function stripHidden(input) {
+  let s = String(input ?? '');
+  let removed = 0;
+  const drop = (re, keep) => {
+    s = s.replace(re, (m, ...rest) => {
+      const offset = rest[rest.length - 2];
+      if (keep?.(m, offset)) return m;
+      removed += [...m].length;
+      return '';
+    });
+  };
+  drop(/(?:\udb40[\udc00-\udc7f])+/g); // tags
+  drop(/(?:[︀-️]|\udb40[\udd00-\uddef]){2,}/g); // selector runs (emoji / byte steganography)
+  drop(/\udb40[\udd00-\uddef]/g); // a stray VS17–VS256
+  drop(/‍/g, (m, i) => /\p{Extended_Pictographic}/u.test(s.slice(Math.max(0, i - 2), i)) && /\p{Extended_Pictographic}/u.test(s.slice(i + 1, i + 3)));
+  drop(/‌/g, (m, i) => /[^\P{L}A-Za-zÀ-ɏ]/u.test(s[i - 1] || '') && /[^\P{L}A-Za-zÀ-ɏ]/u.test(s[i + 1] || ''));
+  drop(/[​⁠-⁤﻿᠎­‪-‮⁦-⁩]/g);
+  let replaced = 0;
+  s = s.replace(/[\p{L}\p{M}]+/gu, (w) => {
+    if (!/[A-Za-z]/.test(w) || !/[Ѐ-ӿͰ-Ͽ]/.test(w)) return w;
+    return [...w]
+      .map((c) => {
+        if (CONFUSABLES[c]) {
+          replaced++;
+          return CONFUSABLES[c];
+        }
+        return c;
+      })
+      .join('');
+  });
+  return { text: s, removed, replaced };
 }
 
 /** Injected: scroll to and flash the element at `selector`. */

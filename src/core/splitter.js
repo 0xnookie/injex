@@ -1,4 +1,4 @@
-// Splitter (from P4RS3LT0NGV3): cut text into several messages, optionally transform each piece and wrap it.
+// Splitter: cut text into several messages, optionally transform each piece and wrap it.
 
 import { transforms, encode } from './registry.js';
 

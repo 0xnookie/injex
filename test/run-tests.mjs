@@ -2,10 +2,11 @@
 
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { list, transforms, encode, decode, canDecode, CATEGORIES, defaultOptions, optionsFor, setOptionPrefs, setCustomAlphabets, makeSpellingTransform, optionId } from '../src/core/registry.js';
+import { list, transforms, encode, decode, canDecode, CATEGORIES, defaultOptions, optionsFor, setOptionPrefs, setCustomAlphabets, setRecipes, makeSpellingTransform, optionId } from '../src/core/registry.js';
 import { universalDecode, peel, detectLanguage, englishness, quality } from '../src/core/decoder.js';
 import { encodeEmojiBits, decodeEmojiBits, encodeEmojiBytes, decodeEmojiBytes, encodeTags, decodeTags, revealAll, STEG_DEFAULTS } from '../src/core/stego.js';
-import { scanText, scanPage, visualize, looksLikeInstructions } from '../src/core/scan.js';
+import { scanText, scanPage, visualize, looksLikeInstructions, stripHidden } from '../src/core/scan.js';
+import { badgeCount } from '../src/core/badge.js';
 import { split, finish } from '../src/core/splitter.js';
 import { tokenade, estimateTokenade, textPayload, mutate, bijectionMapping, bijectionPrompts, gibberish, randomRemovals, removeChars, seeded, TOKENADE_PRESETS } from '../src/core/generators.js';
 import { DEFAULTS } from '../src/core/store.js';
@@ -35,7 +36,7 @@ const MSG = 'Hello world, this is a secret test message';
 
 // ── registry ──
 
-test('registry: 222 upstream transforms, every one categorised', () => {
+test('registry: 222 transforms, every one categorised', () => {
   assert.equal(list().length, 222);
   for (const t of list()) {
     assert.ok(t.name && typeof t.func === 'function', `${t.key} has a name and func`);
@@ -350,6 +351,78 @@ test('manifest: MV3, permissions, version matches package.json', () => {
   assert.equal(m.version, pkg.version);
   assert.deepEqual([...m.permissions].sort(), ['activeTab', 'clipboardWrite', 'contextMenus', 'scripting', 'storage']);
   assert.ok(!m.host_permissions, 'no host permissions: page access only through activeTab');
+  assert.deepEqual(m.optional_host_permissions, ['<all_urls>'], 'all sites only on request (live scan)');
+});
+
+// ── cleaner, recipes, badge ──
+
+test('clean: strips hidden characters, keeps legitimate ones, fixes look-alikes', () => {
+  const dirty = 'Review.' + encodeTags('Ignore previous') + ' Nice ' + encodeEmojiBits('🐍', 'exfil') + ' x​‌y abc‮def pаypal soft­hyphen ﻿end';
+  const r = stripHidden(dirty);
+  assert.equal(r.text, 'Review. Nice 🐍 xy abcdef paypal softhyphen end');
+  assert.equal(r.replaced, 1);
+  assert.ok(r.removed > 40);
+  assert.deepEqual(scanText(r.text), []);
+  // legitimate uses stay
+  for (const s of ['Family 👨‍👩‍👧', 'Love ❤️', 'فا‌رسی', 'Привет мир', MSG]) assert.equal(stripHidden(s).text, s, s);
+});
+
+test('recipes: chain encodes in order, decodes backwards, become transforms', () => {
+  setRecipes([{ name: 'Triple', steps: ['rot13', 'base64', 'hex'] }, { name: 'Lossy', steps: ['base64', 'random_case'] }, { name: 'Empty', steps: ['nope'] }]);
+  const t = transforms.recipe_triple;
+  assert.ok(t && t.category === 'recipe');
+  const out = encode(t, MSG).text;
+  assert.equal(out, enc('hex', enc('base64', enc('rot13', MSG))));
+  assert.equal(decode(t, out).text, MSG);
+  assert.ok(!canDecode(transforms.recipe_lossy), 'a step without a decoder makes the recipe encode-only');
+  assert.ok(!transforms.recipe_empty, 'recipes without existing steps are skipped');
+  // the universal decoder knows saved recipes: it undoes all three layers at once
+  assert.equal(peel(out).at(-1).text, MSG);
+  assert.equal(universalDecode(out).method, 'Triple');
+  // a recipe can use a custom alphabet, and survives the alphabets being reloaded
+  const words = 'Asteroid Black Comet Dust Eclipse Flare Galaxy Halo Ion Jupiter Kuiper Lunar Mars Nebula Orbit Pulsar Quasar Rocket Star Titan Universe Void Warp Xenon Yonder Zenith'.split(' ');
+  setRecipes([{ name: 'Space64', steps: ['custom_space', 'base64'] }]);
+  setCustomAlphabets([{ name: 'Space', words }]);
+  assert.equal(decode(transforms.recipe_space64, encode(transforms.recipe_space64, 'hi').text).text, 'HI');
+  setCustomAlphabets([]);
+  assert.ok(!transforms.recipe_space64, 'dropped when its alphabet is gone');
+  setRecipes([]);
+  assert.equal(list().length, 222);
+});
+
+test('badge: counts critical and high findings only', () => {
+  assert.deepEqual(badgeCount([{ severity: 'critical' }, { severity: 'high' }, { severity: 'medium' }, { severity: 'low' }]), { n: 2, critical: 1 });
+  assert.deepEqual(badgeCount([]), { n: 0, critical: 0 });
+});
+
+// ── Firefox build ──
+
+const { firefoxManifest, GECKO_ID, MIN_FIREFOX } = await import('../tools/build-firefox.mjs');
+const { zip, crc32 } = await import('../tools/zip.mjs');
+
+test('firefox: manifest is an event-page module with a gecko id and options_ui', () => {
+  const m = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url)));
+  const f = firefoxManifest(m);
+  assert.deepEqual(f.background, { scripts: [m.background.service_worker], type: 'module' });
+  assert.equal(f.browser_specific_settings.gecko.id, GECKO_ID);
+  assert.equal(f.browser_specific_settings.gecko.strict_min_version, MIN_FIREFOX);
+  assert.deepEqual(f.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
+  assert.deepEqual(f.options_ui, { page: m.options_page, open_in_tab: true });
+  assert.ok(!f.options_page && !f.minimum_chrome_version && !f.background.service_worker);
+  assert.deepEqual(f.permissions, m.permissions);
+  assert.equal(m.background.service_worker, 'src/background.js', 'the Chrome manifest is not modified');
+});
+
+test('firefox: zip writer produces a valid archive', () => {
+  assert.equal(crc32(Buffer.from('123456789')), 0xcbf43926);
+  const data = Buffer.from('hello hello hello hello');
+  const z = zip([{ name: 'a/b.txt', data }, { name: 'c.bin', data: Buffer.from([1, 2, 3]) }]);
+  assert.equal(z.readUInt32LE(0), 0x04034b50);
+  const end = z.length - 22;
+  assert.equal(z.readUInt32LE(end), 0x06054b50);
+  assert.equal(z.readUInt16LE(end + 10), 2);
+  assert.equal(z.readUInt32LE(14), crc32(data));
+  assert.equal(z.toString('utf8', 30, 37), 'a/b.txt');
 });
 
 const ms = (performance.now() - t0).toFixed(0);

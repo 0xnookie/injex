@@ -1,4 +1,4 @@
-// Universal decoder: runs every transform's detector + reverse (P4RS3LT0NGV3's approach), plus the
+// Universal decoder: runs every transform's detector + reverse, plus the
 // steganography schemes, and ranks the candidates. `peel` repeats it to unwrap nested encodings.
 
 import { list, canDecode, decode, transforms } from './registry.js';
@@ -229,7 +229,7 @@ export function peel(input, { maxLayers = 8, minPriority = 60, stego, branch = 3
   return layers;
 }
 
-// ── language hints (from P4RS3LT0NGV3's decoder tab) ──
+// ── language hints ──
 
 const SCRIPTS = [
   ['Arabic', /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g],

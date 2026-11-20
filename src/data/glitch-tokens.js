@@ -1,6 +1,4 @@
 // Glitch tokens (LLM vocabulary anomalies) and model special tokens.
-// From P4RS3LT0NGV3 (https://github.com/elder-plinius/P4RS3LT0NGV3), AGPL-3.0, which credits the AGGREGLITCH
-// collection (https://github.com/elder-plinius/L1B3RT4S). Converted once from upstream js/data/glitchTokens.js.
 export default {
  "source": "AGGREGLITCH",
  "updated": "2025-12-27",

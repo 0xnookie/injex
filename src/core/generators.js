@@ -1,4 +1,4 @@
-// Payload generators ported from P4RS3LT0NGV3's tools as pure functions:
+// Payload generators as pure functions:
 // Tokenade (token bombs), text payloads, Mutation Lab (fuzzer), Bijection prompts and Gibberish.
 
 import { transforms } from './registry.js';

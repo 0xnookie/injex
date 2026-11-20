@@ -1,8 +1,9 @@
 // Hidden-text scanner: the current page (all frames) or pasted text. Findings are ranked by severity and
 // flagged when the hidden text reads like instructions to a model.
 
-import { scanText, scanPage, collectPage, locateInPage, KINDS, SEVERITY_ORDER } from '../../src/core/scan.js';
-import { $, h, debounce, seg, empty, clip, row, mini, ago, keepDraft, setValue, busy } from '../lib.js';
+import { scanText, scanPage, collectPage, locateInPage, stripHidden, KINDS, SEVERITY_ORDER } from '../../src/core/scan.js';
+import { setScanBadge } from '../../src/core/badge.js';
+import { $, h, icon, debounce, seg, empty, clip, row, mini, ago, keepDraft, setValue, busy } from '../lib.js';
 
 let ctx;
 let src;
@@ -47,15 +48,16 @@ function findingRow(f, i) {
       const actions = h('div', { class: 'row-actions' });
       if (f.payload) actions.append(h('button', { class: 'btn primary', onclick: () => ctx.copy(f.payload, k.label) }, 'Copy hidden text'), h('button', { class: 'btn', onclick: () => ctx.switchTo('decode', { text: f.payload }) }, 'Decode'));
       if (f.path && last?.tabId && hasTabs && src.get() === 'page') actions.append(h('button', { class: 'btn', onclick: () => locate(f) }, 'Show on page'));
-      if (src.get() === 'text' && i === 0 && textFindings.length) actions.append(h('button', { class: 'btn', title: 'Remove every invisible / control character', onclick: () => ctx.copy(clean($('scText').value), 'Cleaned text') }, 'Copy cleaned text'));
       box.append(actions);
     },
   });
 }
 
-/** Strip tag characters, variation-selector runs, zero-width and bidi controls. */
-function clean(s) {
-  return s.replace(/(?:\udb40[\udc00-\udc7f])+/g, '').replace(/(?:[︀-️]|\udb40[\udd00-\uddef]){2,}/g, '').replace(/[​‌⁠-⁤﻿᠎‪-‮⁦-⁩‎‏؜]/g, '');
+/** Copy the pasted text without hidden characters and with look-alike letters fixed. */
+function copyCleaned() {
+  const r = stripHidden($('scText').value);
+  if (!r.removed && !r.replaced) return ctx.toast('Nothing hidden to remove');
+  ctx.copy(r.text, `Cleaned: ${r.removed} hidden removed${r.replaced ? `, ${r.replaced} look-alike${r.replaced === 1 ? '' : 's'} fixed` : ''}`);
 }
 
 async function locate(f) {
@@ -81,6 +83,7 @@ function render() {
   banner.hidden = true;
   const isText = src.get() === 'text';
   $('scTextWrap').hidden = !isText;
+  $('scClean').hidden = !isText || !textFindings.length;
   $('scGo').hidden = isText || (ctx.FULL && !(last?.tabId && hasTabs));
   $('scGo').classList.toggle('popup-only', !ctx.FULL || !last?.tabId);
 
@@ -167,7 +170,8 @@ async function scanPageNow() {
         at: Date.now(),
         tabId,
       };
-      chrome.storage.session?.set({ lastScan: last });
+      chrome.storage.session?.set({ lastScan: last, ['scan:' + tabId]: last });
+      setScanBadge(tabId, last.findings);
     }
   } catch (e) {
     const msg = String(e.message || e);
@@ -207,6 +211,7 @@ export async function init(c) {
   $('scGo').addEventListener('click', scanPageNow);
   $('scSev').addEventListener('change', render);
   $('scInstr').addEventListener('change', render);
+  $('scInstr').closest('label').after(h('button', { class: 'btn', id: 'scClean', hidden: true, title: 'Copy the text without hidden characters, with look-alike letters fixed', onclick: copyCleaned }, icon('spark'), 'Copy cleaned'));
   $('scCopy').addEventListener('click', report);
   $('scText').addEventListener('input', debounce(scanTextNow, 150));
   await keepDraft($('scText'), 'scan');
@@ -214,6 +219,16 @@ export async function init(c) {
   if (ctx.FULL && typeof chrome !== 'undefined' && chrome.storage?.session) {
     const { lastScan } = await chrome.storage.session.get('lastScan');
     if (lastScan) last = lastScan;
+  } else if (hasTabs && chrome.storage?.session) {
+    // popup: show what the live scan (or an earlier scan) found on this tab, if the page hasn't changed
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const key = 'scan:' + tab?.id;
+      const saved = tab && (await chrome.storage.session.get(key))[key];
+      if (saved && saved.url === tab.url) last = saved;
+    } catch {
+      /* no tab */
+    }
   }
   render();
   updateCount();

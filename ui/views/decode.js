@@ -2,7 +2,7 @@
 
 import { list, CATEGORIES, CATEGORY_ORDER, canDecode, decode, transforms } from '../../src/core/registry.js';
 import { universalDecode, peel, detectLanguage, englishness } from '../../src/core/decoder.js';
-import { scanText, KINDS } from '../../src/core/scan.js';
+import { scanText, stripHidden, KINDS } from '../../src/core/scan.js';
 import { $, h, debounce, empty, sizeStat, clip, paste, row, mini, keepDraft, setValue } from '../lib.js';
 
 let ctx;
@@ -55,7 +55,14 @@ function hiddenNote(text) {
   return h(
     'div',
     { class: 'card warn', style: 'margin-bottom: 12px' },
-    h('div', { class: 'card-head' }, h('b', { text: 'Invisible characters in the input' }), h('span', { class: 'spacer' }), h('button', { class: 'mini', onclick: () => ctx.switchTo('scan', { text }) }, 'Open in scanner')),
+    h(
+      'div',
+      { class: 'card-head' },
+      h('b', { text: 'Invisible characters in the input' }),
+      h('span', { class: 'spacer' }),
+      h('button', { class: 'mini', title: 'Copy the input without hidden characters, with look-alike letters fixed', onclick: () => ctx.copy(stripHidden(text).text, 'Cleaned text') }, 'Copy cleaned'),
+      h('button', { class: 'mini', onclick: () => ctx.switchTo('scan', { text }) }, 'Open in scanner'),
+    ),
     h('div', { class: 'row-actions' }, found.map((f) => h('span', { class: 'chip warn', title: KINDS[f.kind]?.desc, text: `${KINDS[f.kind]?.label}: ${f.note}` }))),
   );
 }

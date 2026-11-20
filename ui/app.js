@@ -1,6 +1,6 @@
 // injex popup / dashboard shell: tabs, settings, shared context for the views.
 
-import { list, setOptionPrefs, setCustomAlphabets } from '../src/core/registry.js';
+import { list, setOptionPrefs, setCustomAlphabets, setRecipes } from '../src/core/registry.js';
 import * as store from '../src/core/store.js';
 import { $, h, toast, copy } from './lib.js';
 
@@ -33,6 +33,7 @@ let active = null;
 const settings = await store.get();
 applyTheme(settings.theme);
 setOptionPrefs(settings.optionPrefs);
+setRecipes(settings.recipes);
 setCustomAlphabets(settings.customAlphabets);
 
 function applyTheme(theme) {
@@ -64,6 +65,7 @@ const ctx = {
 
 function openOptions(hash = '') {
   if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage && !hash) chrome.runtime.openOptionsPage();
+  else if (typeof chrome !== 'undefined' && chrome.tabs) chrome.tabs.create({ url: chrome.runtime.getURL('ui/options.html' + hash) });
   else window.open('options.html' + hash, '_blank');
 }
 
@@ -141,14 +143,29 @@ document.addEventListener('keydown', (e) => {
 store.onChange((changes) => {
   if (changes.theme) applyTheme(changes.theme.newValue);
   if (changes.optionPrefs) setOptionPrefs((settings.optionPrefs = changes.optionPrefs.newValue));
-  if (changes.customAlphabets) {
-    setCustomAlphabets((settings.customAlphabets = changes.customAlphabets.newValue));
+  if (changes.recipes) setRecipes((settings.recipes = changes.recipes.newValue));
+  if (changes.customAlphabets) setCustomAlphabets((settings.customAlphabets = changes.customAlphabets.newValue));
+  if (changes.customAlphabets || changes.recipes) {
     ctx.setCount('transform', list().length);
     $('status').textContent = `${list().length} transforms · runs locally`;
   }
-  for (const [k, v] of Object.entries(changes)) if (!(k in { optionPrefs: 1, customAlphabets: 1 })) settings[k] = v.newValue;
+  for (const [k, v] of Object.entries(changes)) if (!(k in { optionPrefs: 1, customAlphabets: 1, recipes: 1 })) settings[k] = v.newValue;
   for (const m of Object.values(loaded)) m.onSettings?.(changes);
 });
 
 const initial = location.hash.slice(1) || settings.lastTab || 'transform';
 switchTo(TABS.some((t) => t.id === initial) ? initial : 'transform');
+
+// popup: what the live scan found on this tab shows on the Scan tab right away
+if (!FULL && typeof chrome !== 'undefined' && chrome.tabs && chrome.storage?.session) {
+  chrome.tabs
+    .query({ active: true, currentWindow: true })
+    .then(async ([tab]) => {
+      const key = 'scan:' + tab?.id;
+      const scan = tab && (await chrome.storage.session.get(key))[key];
+      if (!scan || scan.url !== tab.url || loaded.scan || !scan.findings?.length) return;
+      const sev = (s) => scan.findings.some((f) => f.severity === s);
+      ctx.setCount('scan', scan.findings.length, sev('critical') ? 'crit' : sev('high') ? 'hot' : '');
+    })
+    .catch(() => {});
+}

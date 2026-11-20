@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "injex",
   "short_name": "injex",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Prompt-injection text toolkit: 222 encoders, ciphers and Unicode tricks, a universal decoder, steganography and a hidden-text scanner.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -24,14 +24,27 @@
     "type": "module"
   },
   "options_page": "ui/options.html",
-  "permissions": ["storage", "contextMenus", "activeTab", "scripting", "clipboardWrite"],
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "scripting",
+    "clipboardWrite"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+I" },
+      "suggested_key": {
+        "default": "Alt+Shift+I"
+      },
       "description": "Open injex"
     },
     "decode-selection": {
-      "suggested_key": { "default": "Alt+Shift+D" },
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
       "description": "Decode the selected text"
     },
     "scan-page": {

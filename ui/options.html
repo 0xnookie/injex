@@ -38,6 +38,18 @@
         </div>
       </section>
 
+      <section class="card" id="live">
+        <h2>Live scan</h2>
+        <p>Scan every page you open for hidden text and count what it finds on the toolbar icon — a warning before you paste a page into an AI tool or let an agent read it. Off by default, because it needs permission to read all sites. Pages are analysed locally; nothing is sent anywhere.</p>
+        <div class="opt-grid">
+          <label class="opt">
+            <input type="checkbox" id="liveOn" />
+            <div><b>Scan pages as they load</b><span>The badge counts critical and high findings: red when a page hides instructions in invisible characters or emoji steganography, orange for hidden instructions in CSS or comments. Open the popup to see them.</span></div>
+          </label>
+        </div>
+        <small class="hint" id="liveMsg"></small>
+      </section>
+
       <section class="card" id="ai">
         <h2>AI tools (OpenRouter)</h2>
         <p>PromptCraft, Anti-Classifier, translation and alphabet generation use your own <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter API key</a>. It never leaves this browser except in requests to openrouter.ai.</p>
@@ -158,8 +170,6 @@
         <h2>About</h2>
         <p id="aboutText"></p>
         <dl class="meta">
-          <dt>Transforms</dt>
-          <dd>Ported from <a href="https://github.com/elder-plinius/P4RS3LT0NGV3" target="_blank" rel="noopener">P4RS3LT0NGV3</a> by elder-plinius (AGPL-3.0)</dd>
           <dt>Tokenizers</dt>
           <dd><a href="https://github.com/niieani/gpt-tokenizer" target="_blank" rel="noopener">gpt-tokenizer</a> (MIT)</dd>
           <dt>Codes</dt>

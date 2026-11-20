@@ -7,14 +7,14 @@ injex
 
 ### Prompt-Injection Text Toolkit for Red Teamers & AI Security Testing
 
-**A Chrome / Edge extension that encodes, hides and decodes text the way prompt-injection payloads do — 222 encoders, ciphers and Unicode tricks, a universal decoder that peels nested layers, emoji and Unicode-tag steganography, token tools, payload generators — and scans the page you're on for the text a model reads but you don't see: invisible tag characters, emoji steganography, zero-width and bidi characters, homoglyphs, CSS-hidden text and HTML comments. Everything runs locally in your browser.**
+**A Chrome / Edge / Firefox extension that encodes, hides and decodes text the way prompt-injection payloads do — 222 encoders, ciphers and Unicode tricks, a universal decoder that peels nested layers, emoji and Unicode-tag steganography, token tools, payload generators — and scans the page you're on for the text a model reads but you don't see: invisible tag characters, emoji steganography, zero-width and bidi characters, homoglyphs, CSS-hidden text and HTML comments. Everything runs locally in your browser.**
 
 🎯 [What is it](#-what-is-injex) • ✨ [Features](#-features) • 🖥️ [Screenshots](#️-screenshots) • 🏗️ [How it works](#️-how-it-works) • 🚀 [Install](#-install) • 🕹️ [Usage](#️-usage) • ⚙️ [Settings](#️-settings--network-activity) • 🧪 [Tests](#-tests) • 🛡️ [Safety](#️-safety--authorization)
 
 [![CI](https://github.com/0xnookie/injex/actions/workflows/ci.yml/badge.svg)](https://github.com/0xnookie/injex/actions/workflows/ci.yml)
 [![Security](https://img.shields.io/badge/Security-AI%20Red%20Team-red)]()
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Browser](https://img.shields.io/badge/Chrome%20%7C%20Edge-Manifest%20V3-black?logo=googlechrome&logoColor=white)]()
+[![Browser](https://img.shields.io/badge/Chrome%20%7C%20Edge%20%7C%20Firefox-Manifest%20V3-black?logo=googlechrome&logoColor=white)]()
 [![Transforms](https://img.shields.io/badge/Transforms-222-brightgreen)]()
 [![Scanner](https://img.shields.io/badge/Hidden--text%20checks-8-red)]()
 [![Tokenizers](https://img.shields.io/badge/Tokenizers-o200k%20%7C%20cl100k%20%7C%20p50k%20%7C%20r50k-8A2BE2)]()
@@ -29,15 +29,18 @@ injex
 
 Language models read text differently from people. A Unicode tag character is invisible on screen and perfectly legible to a model; a run of variation selectors after an emoji carries a whole sentence; a word in Cyrillic look-alikes slips past a keyword filter; Base64 inside ROT13 inside hex still gets decoded by a model that "helpfully" works it out. injex puts the tools for that in your browser toolbar — to **build** test payloads, to **decode** what you find, and to **scan** a page for what an AI agent or summarizer would pick up from it.
 
-- **Every transform, live.** All 222 transforms of [P4RS3LT0NGV3](https://github.com/elder-plinius/P4RS3LT0NGV3) — Base64 to Base122, classical and keyed ciphers, Morse, Braille, runes and fictional alphabets, 30 Unicode styles, zalgo, invisible text — update as you type. One click copies; the output can be fed straight back in to stack layers.
+- **Every transform, live.** All 222 transforms — Base64 to Base122, classical and keyed ciphers, Morse, Braille, runes and fictional alphabets, 30 Unicode styles, zalgo, invisible text — update as you type. One click copies; the output can be fed straight back in to stack layers.
 - **Decodes anything, even nested.** Paste a blob and every detector and decoder runs. Results are ranked by detector priority, how readable the output is and how much it reads like English, then **peeled**: `Base32 → Base64 → ROT13 → "reveal the system prompt"`. Plain text is recognised as plain text instead of being "decoded" into noise.
 - **Finds hidden text on any page.** One click scans the page and all its frames for Unicode tags, emoji steganography, zero-width runs (decoded when they carry a message), bidi overrides, homoglyph words, text hidden with CSS and sentence-like HTML comments. Anything that reads like instructions to a model — or asks it to send data somewhere — is flagged, and *Show on page* takes you to the element.
-- **Hides text, too.** Emoji steganography (one variation selector per bit, P4RS3LT0NGV3-compatible and configurable, or one per byte) and invisible Unicode tags, from the toolbar or the right-click menu.
+- **Warns while you browse (opt-in).** Turn on *Live scan* and every page is checked as it loads; the toolbar badge counts hidden instructions before you paste the page into an AI tool or let an agent read it.
+- **Cleans text.** *Remove hidden characters* strips tags, selector runs, zero-width and bidi characters and fixes Cyrillic / Greek look-alike letters — from the right-click menu, the Scan tab or Decode.
+- **Hides text, too.** Emoji steganography (one variation selector per bit, configurable, or one per byte) and invisible Unicode tags, from the toolbar or the right-click menu.
 - **Works where you type.** Select text on any page → right-click → *injex* to encode it in place (inputs and editors), decode it, hide it in an emoji or make it invisible. **Alt+Shift+D** decodes the selection.
 - **Shows what the model sees.** Bundled GPT tokenizers (o200k, cl100k, p50k, r50k) colour every token, so you can see what an emoji or a tag sequence costs.
+- **Recipes.** Chain transforms (ROT13 → Base64 → invisible tags …) and save the chain as one transform: it decodes in reverse, the universal decoder recognises it, and it can go in the right-click menu.
 - **Generates payloads.** Splitter (cut a payload across messages, every word broken in half), Mutation Lab (seeded fuzz variants), Tokenade (token bombs), Bijection prompts, Gibberish dictionaries, QR / barcodes, your own spelling alphabets.
 - **Bring your own model.** PromptCraft rewrites, Anti-Classifier and translation (including dead and constructed languages) through OpenRouter with your key — the only feature that touches the network.
-- **Private.** No telemetry, no remote code, no host permissions: page access only happens through `activeTab`, when you click.
+- **Private.** No telemetry, no remote code, no host permissions: page access only happens through `activeTab`, when you click — unless you switch on Live scan, which asks for it.
 
 ---
 
@@ -45,10 +48,10 @@ Language models read text differently from people. A Unicode tag character is in
 
 | Tab | What you get |
 |---|---|
-| **Transform** | 222 transforms in 11 categories — **Encoding** (Base16/32/36/45/58/62/64/85/91/122, Z85, uuencode, yEnc, quoted-printable, URL, HTML entities, hex, binary, octal …), **Cipher** (ROT13/18/47/8000, Caesar, Atbash, Vigenère, Beaufort, Autokey, Playfair, Bifid, Trifid, ADFGVX, Hill, Rail Fence, XOR …), **Concealment** (invisible Unicode tags, zero-width and whitespace steganography, homoglyphs, null cipher, acrostic, Cardan grille …), **Unicode** (bold, italic, fraktur, script, double-struck, small caps, bubble, squared, upside-down, zalgo, combining underlines …), **Symbol** (Braille, runes, Ogham, hieroglyphs, Aurebesh, Klingon, Tengwar, Daedric, pigpen …), **Technical** (Morse, NATO/ICAO, semaphore, DTMF, T9, tap code …), **Visual**, **Case**, **Format**, **SignWriting** and **Random Mix**. Encode or decode with every transform at once; filter by name, category or `/regex/`; star favorites; per-transform options (gear) are remembered; *Use as input* chains layers; *Menu* adds a transform to the right-click menu. Rows are filled lazily, so it stays instant with long inputs. |
+| **Transform** | 222 transforms in 11 categories — **Encoding** (Base16/32/36/45/58/62/64/85/91/122, Z85, uuencode, yEnc, quoted-printable, URL, HTML entities, hex, binary, octal …), **Cipher** (ROT13/18/47/8000, Caesar, Atbash, Vigenère, Beaufort, Autokey, Playfair, Bifid, Trifid, ADFGVX, Hill, Rail Fence, XOR …), **Concealment** (invisible Unicode tags, zero-width and whitespace steganography, homoglyphs, null cipher, acrostic, Cardan grille …), **Unicode** (bold, italic, fraktur, script, double-struck, small caps, bubble, squared, upside-down, zalgo, combining underlines …), **Symbol** (Braille, runes, Ogham, hieroglyphs, Aurebesh, Klingon, Tengwar, Daedric, pigpen …), **Technical** (Morse, NATO/ICAO, semaphore, DTMF, T9, tap code …), **Visual**, **Case**, **Format**, **SignWriting** and **Random Mix**. Encode or decode with every transform at once; filter by name, category or `/regex/`; star favorites; per-transform options (gear) are remembered; *Use as input* chains layers; *Menu* adds a transform to the right-click menu. **Recipes**: click **+** on transforms to chain them, see the output live, save the chain under a name — it becomes a transform (category *Recipes*) that decodes in reverse and can be edited, deleted or put in the right-click menu. Rows are filled lazily, so it stays instant with long inputs. |
 | **Decode** | Universal decoder: all detectors and decoders plus every steganography scheme, ranked by priority × output readability + English-likeness. **Peel layers** unwraps nested encodings with a short look-ahead (it follows the top candidates a few layers deep and keeps the branch that ends in readable text). Cipher-level layers only count when they make the text more English; look-alike outputs (a decoder that only swaps a few letters) and decoders that return their error message are discarded. Force a specific decoder from the list. Language hints (14 scripts, 9 Latin-script languages) with one-click translation. Other readings are listed with *likely* / *maybe* / *weak*. |
-| **Stego** | Hide a message after any emoji — **bits** (VS15/VS16 per bit; selectors, bit order, presentation selector and zero-width padding configurable, compatible with P4RS3LT0NGV3) or **bytes** (VS1–VS256 per byte, 8× shorter) — or as **invisible Unicode tags**. 1,894 emoji to pick a carrier from. **Reveal** tries every scheme on pasted text. |
-| **Scan** | Hidden-text scanner for **this page** (all frames, via `activeTab`) or **pasted text**. 8 checks: Unicode tags · emoji stego (bits / bytes) · zero-width runs · bidi overrides / isolates ("Trojan Source") · homoglyph words · CSS-hidden text (`display:none`, `visibility`, `opacity:0`, tiny font, transparent or same-as-background colour, clipped, off-screen) · sentence-like HTML comments · attributes (`alt`, `title`, `aria-*`, `placeholder`, `content` …). Each finding has a severity, the decoded payload, its context with invisible characters made visible, the element path and an **instructions** flag when it reads like a prompt injection or an exfiltration request. *Show on page*, *Decode*, *Copy cleaned text*, Markdown report. The tab badge counts findings (red for critical). |
+| **Stego** | Hide a message after any emoji — **bits** (VS15/VS16 per bit; selectors, bit order, presentation selector and zero-width padding configurable) or **bytes** (VS1–VS256 per byte, 8× shorter) — or as **invisible Unicode tags**. 1,894 emoji to pick a carrier from. **Reveal** tries every scheme on pasted text. |
+| **Scan** | Hidden-text scanner for **this page** (all frames, via `activeTab`) or **pasted text**. 8 checks: Unicode tags · emoji stego (bits / bytes) · zero-width runs · bidi overrides / isolates ("Trojan Source") · homoglyph words · CSS-hidden text (`display:none`, `visibility`, `opacity:0`, tiny font, transparent or same-as-background colour, clipped, off-screen) · sentence-like HTML comments · attributes (`alt`, `title`, `aria-*`, `placeholder`, `content` …). Each finding has a severity, the decoded payload, its context with invisible characters made visible, the element path and an **instructions** flag when it reads like a prompt injection or an exfiltration request. *Show on page*, *Decode*, **Copy cleaned** (hidden characters removed, look-alike letters fixed), Markdown report. The tab badge counts findings (red for critical). **Live scan** (opt-in, Settings): every page is scanned as it finishes loading and the toolbar badge shows the number of critical and high findings; the popup opens with that tab's results. |
 | **Tokenizer** | o200k (GPT-4o, o-series), cl100k (GPT-4, GPT-3.5), p50k, r50k — bundled, offline — plus UTF-8 bytes, code points and words. Coloured tokens with visible whitespace, partial-character tokens outlined, token IDs, chars-per-token, and a count across all four encodings. |
 | **Splitter** | Cut a payload into messages: **word** mode breaks every word across two messages (so no message holds a full keyword), or chunks, sentences, lines, a regex, or N tokens. Transform each piece through a chain of transforms and wrap it (`<part{n}>…</part{n}>`, code fences, quotes …). |
 | **Mutation Lab** | Up to 500 variants of a payload: Random Mix, zero-width noise, diacritics, zalgo, whitespace swaps, random casing, homoglyphs. A seed makes the set reproducible. Copy all or download. |
@@ -61,7 +64,7 @@ Language models read text differently from people. A Unicode tag character is in
 | **Library** | 177 **glitch tokens** (AGGREGLITCH: unspeakable, polysemantic, loop-inducing …) with their token IDs and origin, model **special tokens** (OpenAI, Llama, Gemma, Mistral, Qwen, Phi, Command …), 37 **end / delimiter sequences**, and a table of 47 **invisible and look-alike characters** to copy. |
 | **History** | Everything you copied from injex — including right-click results on pages — searchable, re-copyable, sendable to Decode / Transform / Scan, exportable as JSON. |
 
-**Right-click menu** (on a selection): *Decode selection* · *Encode selection →* your chosen transforms · *Hide selection in emoji* · *Make selection invisible (Unicode tags)* · *Scan page for hidden text* · *Open dashboard*. In inputs, textareas and rich editors the selection is **replaced in place**; elsewhere a small panel shows the result and copies it.
+**Right-click menu** (on a selection): *Decode selection* · *Encode selection →* your chosen transforms and recipes · *Remove hidden characters* · *Hide selection in emoji* · *Make selection invisible (Unicode tags)* · *Scan page for hidden text* · *Open dashboard*. In inputs, textareas and rich editors the selection is **replaced in place**; elsewhere a small panel shows the result and copies it.
 
 ---
 
@@ -87,8 +90,8 @@ Language models read text differently from people. A Unicode tag character is in
 </table>
 
 <p align="center">
-  <img src="assets/screenshots/dashboard-transform.png" alt="Transform tab in the dashboard" width="100%" />
-  <br/><sub><b>Dashboard</b>: the same tools in a full tab — here a transform opened with its options, chain and right-click-menu switch</sub>
+  <img src="assets/screenshots/dashboard-recipe.png" alt="Recipe builder in the dashboard" width="100%" />
+  <br/><sub><b>Recipes</b>: ROT13 → Base64 → invisible tags, saved as one transform that decodes in reverse — the universal decoder recognises it too</sub>
 </p>
 
 <table>
@@ -114,22 +117,23 @@ Language models read text differently from people. A Unicode tag character is in
            └───────┬─────────────────────────────────────────┘        │ stego, backup    │
                    │ imports                                           └────────┬─────────┘
                    ▼                                                            │ chrome.storage.local
-   src/core/ ─ registry.js   222 transforms (src/transforms/, verbatim upstream) + options + custom alphabets
+   src/core/ ─ registry.js   222 transforms (src/transforms/) + options + custom alphabets
              ─ decoder.js    detectors → ranked candidates → layer peeling with look-ahead, language hints
              ─ stego.js      emoji VS bits / bytes, Unicode tags
              ─ scan.js       scanText() (pure) + collectPage() / locateInPage() (injected)
-             ─ splitter.js · generators.js · tokenizer.js · openrouter.js · store.js
+             ─ splitter.js · generators.js · tokenizer.js · openrouter.js · store.js · badge.js
                    ▲
                    │ same modules
-   src/background.js (service worker) ── context menu, Alt+Shift+D ──▶ chrome.scripting (activeTab)
+   src/background.js (service worker / Firefox event page) ── menu, Alt+Shift+D, live scan ──▶ chrome.scripting
                                                                        └ src/page.js: read / replace the
                                                                          selection, result panel (shadow DOM)
 ```
 
-- **No build step.** Plain ES modules; the transform index is generated once by `tools/sync-transforms.mjs` and committed. Upstream transform files are kept verbatim so they can be re-synced.
+- **No build step.** Plain ES modules; the transform index is generated once by `tools/sync-transforms.mjs` and committed. Transform modules are kept unmodified, one file each, so they can be re-synced.
 - **Pure core.** Everything in `src/core/` (except the injected page functions) runs in Node, the service worker and extension pages alike, which is what the tests exercise.
 - **Ranking.** `score = priority × (0.1 + 0.9 × quality²) + 80 × englishness`, where *quality* penalises control characters and U+FFFD three-fold and *englishness* mixes common-word share with a letter-frequency fit. Decoders without a detector start at priority 10 and rise only as far as their output reads more English than the input.
-- **Page access** happens only through `activeTab`: the scanner and the right-click actions inject a self-contained function into the tab you clicked on, and only then.
+- **Page access** happens only through `activeTab`: the scanner and the right-click actions inject a self-contained function into the tab you clicked on, and only then. Live scan is the exception you opt into: with the all-sites permission it injects the same collector when a page finishes loading.
+- **One codebase, two browsers.** `tools/build-firefox.mjs` writes `dist/firefox/` with a Firefox manifest (event-page background, gecko id, `options_ui`); the code is identical.
 
 ---
 
@@ -144,6 +148,8 @@ Language models read text differently from people. A Unicode tag character is in
 4. Pin the extension. **Alt+Shift+I** opens it, **Alt+Shift+D** decodes the selection on any page.
 
 No build step and no runtime dependencies. Chrome / Edge 116+. Tagged releases also ship a ZIP of the extension.
+
+**Firefox 128+:** download `injex-firefox-<version>.zip` from the [releases](https://github.com/0xnookie/injex/releases) (or run `node tools/build-firefox.mjs`, which writes `dist/firefox/`), open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** and pick the ZIP or `dist/firefox/manifest.json`. Same code, a Firefox manifest. Release Firefox keeps an unsigned add-on until it restarts; Developer Edition / Nightly can keep it with `xpinstall.signatures.required` set to `false`. Shortcuts are changed under `about:addons` → ⚙ → *Manage Extension Shortcuts*.
 
 ---
 
@@ -163,10 +169,11 @@ No build step and no runtime dependencies. Chrome / Edge 116+. Tagged releases a
 |---|---|---|
 | Every transform, decoder, steganography scheme, the scanner, tokenizers, generators, codes | always on | **none** — all local, all libraries bundled |
 | Page scan, right-click actions | on click | none; injects a function into the tab you clicked (`activeTab`) |
+| **Live scan** | **off** | none; asks for permission to read all sites, then scans each page locally as it loads. Switching it off gives the permission back |
 | AI tools, alphabet generation, *Test key*, *Load the full model list* | manual | requests to `openrouter.ai` with your key (the model list needs no key) |
 | Theme | system | — |
-| Emoji steganography (bit selectors, order, presentation selector, padding, carrier) | P4RS3LT0NGV3's scheme | — |
-| Right-click menu transforms | 12 common ones | — |
+| Emoji steganography (bit selectors, order, presentation selector, padding, carrier) | VS15 = 0, VS16 = 1, most significant bit first | — |
+| Right-click menu transforms | 12 common ones (plus any recipe or alphabet you add) | — |
 | History of copies | on, 100 entries | — |
 
 Settings, favorites, options, alphabets and history live in `chrome.storage.local`; drafts and the last scan in `chrome.storage.session`. **Backup** exports them as JSON (the API key and history only if you tick the box).
@@ -177,13 +184,14 @@ Settings, favorites, options, alphabets and history live in `chrome.storage.loca
 
 ```bash
 node test/run-tests.mjs      # registry (all 222 transforms encode; decoders survive garbage; round trips; options;
-                             # custom alphabets), universal decoder (single and nested layers, ranking ties, URL / HTML,
+                             # custom alphabets, recipes), universal decoder (single and nested layers, ranking ties, URL / HTML,
                              # plain text left alone, look-alike / error outputs, stego, speed), steganography (every
                              # option combination, unicode), scanner (all checks, false-positive guards, instruction
-                             # heuristics, page chunks, visualisation), splitter, generators, data files, manifest
+                             # heuristics, page chunks, visualisation, cleaner), splitter, generators, badge, data files,
+                             # manifest, Firefox manifest + ZIP writer
 ```
 
-CI runs the suite, syntax-checks every module, verifies the transform index is in sync and validates the manifest.
+CI runs the suite, syntax-checks every module, verifies the transform index is in sync, validates the manifest and builds the Firefox package.
 
 ---
 
@@ -202,16 +210,18 @@ src/core/generators.js   tokenade, mutation lab, bijection, gibberish, seeded RN
 src/core/tokenizer.js    GPT tokenizers (bundled gpt-tokenizer encodings)
 src/core/openrouter.js   OpenRouter client and prompts
 src/core/store.js        settings and history
-src/transforms/          222 transform modules from P4RS3LT0NGV3 (verbatim) + generated index.js
+src/core/badge.js        toolbar badge for scan findings
+src/transforms/          222 transform modules + generated index.js
 src/data/                emoji list, glitch tokens, end sequences, anti-classifier prompt
 ui/                      app.html / app.js (popup + dashboard shell), views/ (one module per tab),
                          options.html / options.js, lib.js, style.css
 vendor/                  gpt-tokenizer encodings, node-qrcode, JsBarcode, ZXing (+ licenses)
 icons/  fonts/           logo and toolbar icons; Inter and JetBrains Mono (SIL OFL)
 assets/                  README banner and screenshots
-tools/                   sync-transforms.mjs (transform index), build-emoji-data.mjs (emoji list)
+tools/                   sync-transforms.mjs (transform index), build-emoji-data.mjs (emoji list),
+                         build-firefox.mjs + zip.mjs (Firefox manifest and package)
 test/                    Node tests
-.github/workflows/       CI and tagged-release packaging
+.github/workflows/       CI and tagged-release packaging (Chrome and Firefox ZIPs)
 ```
 
 ---
@@ -220,7 +230,7 @@ test/                    Node tests
 
 injex is for **authorized** testing and research: red-teaming AI systems you own or are permitted to test, bug-bounty programs that cover AI features, evaluating filters and guardrails, CTFs, and checking content for hidden instructions before an AI agent reads it.
 
-- ✅ No host permissions: pages are only touched through `activeTab`, after your click
+- ✅ No host permissions: pages are only touched through `activeTab`, after your click — Live scan is opt-in, asks for the permission and gives it back when switched off
 - ✅ No telemetry, no remote code; the only network traffic is OpenRouter, when you use an AI tool
 - ✅ Your API key stays in `chrome.storage.local` and is only sent to `openrouter.ai`
 - ✅ The scanner only reads; *Show on page* only scrolls and outlines the element
@@ -233,6 +243,6 @@ injex is for **authorized** testing and research: red-teaming AI systems you own
 
 ## 📜 License & credits
 
-**AGPL-3.0-or-later**, see [`LICENSE`](LICENSE). The transforms, the decoder approach, the steganography scheme, the glitch-token, end-sequence and anti-classifier data come from **[P4RS3LT0NGV3](https://github.com/elder-plinius/P4RS3LT0NGV3)** by [elder-plinius](https://github.com/elder-plinius) (AGPL-3.0), which this extension builds on; the glitch tokens are from the AGGREGLITCH collection ([L1B3RT4S](https://github.com/elder-plinius/L1B3RT4S)).
+**AGPL-3.0-or-later**, see [`LICENSE`](LICENSE). Inspired by [P4RS3LT0NGV3](https://elder-plinius.github.io/P4RS3LT0NGV3/#decoder); its transform modules and its glitch-token, end-sequence and anti-classifier data are included under the AGPL-3.0.
 
 Bundled third-party code, with its licenses in `vendor/`: [gpt-tokenizer](https://github.com/niieani/gpt-tokenizer) (MIT), [node-qrcode](https://github.com/soldair/node-qrcode) (MIT), [JsBarcode](https://github.com/lindell/JsBarcode) (MIT), [ZXing](https://github.com/zxing-js/library) (Apache-2.0). Fonts: Inter and JetBrains Mono under the SIL Open Font License (`fonts/`). UI design follows [JS Recon](https://github.com/0xnookie/js-recon).

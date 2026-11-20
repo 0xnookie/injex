@@ -1,20 +1,25 @@
 // Service worker: right-click menu and keyboard shortcuts that work on the page you're on.
 //   Encode selection → <transform>   replaces the selection in inputs / editors, otherwise shows + copies it
 //   Decode selection                 universal decoder, unwraps nested layers and hidden text
+//   Remove hidden characters         strips tags / selector runs / zero-width / bidi, fixes look-alikes
 //   Hide selection in emoji          emoji steganography with the carrier from the popup
 //   Scan page for hidden text        opens the dashboard with what the scanner found
-// Everything runs locally; activeTab (granted by the menu click / shortcut) is the only page access.
+// plus the opt-in live scan: every page that finishes loading is scanned and the toolbar badge counts
+// critical / high findings. Everything runs locally; without live scan, activeTab (granted by the menu
+// click / shortcut) is the only page access.
 
-import { transforms, encode, setOptionPrefs, setCustomAlphabets } from './core/registry.js';
+import { transforms, encode, setOptionPrefs, setCustomAlphabets, setRecipes } from './core/registry.js';
 import { peel, universalDecode, englishness } from './core/decoder.js';
 import { encodeEmojiBits, encodeTags } from './core/stego.js';
-import { collectPage, scanPage } from './core/scan.js';
+import { collectPage, scanPage, stripHidden } from './core/scan.js';
+import { setScanBadge } from './core/badge.js';
 import { captureSelection, applyResult } from './page.js';
 import * as store from './core/store.js';
 
 async function loadPrefs() {
-  const s = await store.get(['optionPrefs', 'customAlphabets', 'stego', 'menuTransforms', 'stegoCarrier']);
+  const s = await store.get(['optionPrefs', 'customAlphabets', 'recipes', 'stego', 'menuTransforms', 'stegoCarrier']);
   setOptionPrefs(s.optionPrefs);
+  setRecipes(s.recipes);
   setCustomAlphabets(s.customAlphabets);
   return s;
 }
@@ -34,6 +39,8 @@ async function buildMenu() {
   }
   chrome.contextMenus.create({ id: 'enc-sep', parentId: 'encode', type: 'separator', contexts: sel });
   chrome.contextMenus.create({ id: 'enc:__more', parentId: 'encode', title: 'Choose transforms…', contexts: sel });
+  chrome.contextMenus.create({ id: 'clean', parentId: 'root', title: 'Remove hidden characters', contexts: sel });
+  chrome.contextMenus.create({ id: 'sep0', parentId: 'root', type: 'separator', contexts: sel });
   chrome.contextMenus.create({ id: 'stego', parentId: 'root', title: 'Hide selection in emoji', contexts: sel });
   chrome.contextMenus.create({ id: 'tags', parentId: 'root', title: 'Make selection invisible (Unicode tags)', contexts: sel });
   chrome.contextMenus.create({ id: 'sep1', parentId: 'root', type: 'separator', contexts: ['selection', 'page', 'editable'] });
@@ -44,7 +51,7 @@ async function buildMenu() {
 chrome.runtime.onInstalled.addListener(buildMenu);
 chrome.runtime.onStartup.addListener(buildMenu);
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes.menuTransforms || changes.customAlphabets)) buildMenu();
+  if (area === 'local' && (changes.menuTransforms || changes.customAlphabets || changes.recipes)) buildMenu();
 });
 
 // ── page helpers ──
@@ -130,32 +137,67 @@ async function doStego(tab, frameId, selectionText, kind) {
   });
 }
 
-async function doScan(tab) {
+async function doClean(tab, frameId, selectionText) {
+  const { frameId: fid, sel } = await grabSelection(tab.id, frameId, selectionText);
+  if (!sel?.text) return show(tab.id, fid, { title: 'Nothing selected', result: 'Select some text first.', error: true });
+  const r = stripHidden(sel.text);
+  if (!r.removed && !r.replaced) return show(tab.id, fid, { title: 'Nothing hidden', result: 'The selection has no hidden characters or look-alike letters.', error: true });
+  await store.pushHistory(r.text, 'Cleaned text');
+  const sub = `${r.removed} hidden character${r.removed === 1 ? '' : 's'} removed` + (r.replaced ? `, ${r.replaced} look-alike${r.replaced === 1 ? '' : 's'} fixed` : '');
+  return show(tab.id, fid, { title: 'Cleaned', sub, result: r.text, replace: sel.editable });
+}
+
+/** Collect the tab (all frames it allows) and scan it. Throws when the page can't be scripted. */
+async function runScan(tab) {
   const s = await loadPrefs();
-  let results = [];
+  let results;
   try {
     results = await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, func: collectPage });
   } catch {
-    try {
-      results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: collectPage });
-    } catch (e) {
-      await chrome.storage.session.set({ lastScan: { error: e.message || String(e), url: tab.url, at: Date.now() } });
-      return chrome.tabs.create({ url: chrome.runtime.getURL('ui/app.html?full=1#scan') });
-    }
+    results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: collectPage });
   }
   const top = results.find((r) => r.frameId === 0)?.result || results[0]?.result || {};
   const chunks = results.flatMap((r) => (r.result?.chunks || []).map((c) => ({ ...c, frame: r.frameId })));
   const findings = scanPage({ chunks }, { stego: s.stego });
-  await chrome.storage.session.set({
-    lastScan: { url: top.url || tab.url, title: top.title || tab.title, findings, chunks: chunks.length, frames: results.length, truncated: results.some((r) => r.result?.truncated), at: Date.now(), tabId: tab.id },
-  });
+  const scan = { url: top.url || tab.url, title: top.title || tab.title, findings, chunks: chunks.length, frames: results.length, truncated: results.some((r) => r.result?.truncated), at: Date.now(), tabId: tab.id };
+  await chrome.storage.session.set({ ['scan:' + tab.id]: scan });
+  await setScanBadge(tab.id, findings);
+  return scan;
+}
+
+async function doScan(tab) {
+  let scan;
+  try {
+    scan = await runScan(tab);
+  } catch (e) {
+    scan = { error: e.message || String(e), url: tab.url, at: Date.now() };
+  }
+  await chrome.storage.session.set({ lastScan: scan });
   chrome.tabs.create({ url: chrome.runtime.getURL('ui/app.html?full=1#scan'), index: tab.index + 1 });
 }
+
+// ── live scan (opt-in in Settings; needs the optional permission to read all sites) ──
+
+const ALL_SITES = { origins: ['<all_urls>'] };
+
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
+  if (info.status !== 'complete' || !/^https?:/i.test(tab.url || '')) return;
+  try {
+    const { autoScan } = await store.get(['autoScan']);
+    if (!autoScan || !(await chrome.permissions.contains(ALL_SITES))) return;
+    await runScan(tab);
+  } catch {
+    /* pages that can't be scripted (web stores, PDFs, error pages) */
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => chrome.storage.session.remove('scan:' + tabId).catch(() => {}));
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const id = String(info.menuItemId);
   try {
     if (id === 'decode') return await doDecode(tab, info.frameId, info.selectionText);
+    if (id === 'clean') return await doClean(tab, info.frameId, info.selectionText);
     if (id === 'stego' || id === 'tags') return await doStego(tab, info.frameId, info.selectionText, id);
     if (id === 'scan') return await doScan(tab);
     if (id === 'open') return chrome.tabs.create({ url: chrome.runtime.getURL('ui/app.html?full=1') });

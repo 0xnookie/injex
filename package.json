@@ -1,6 +1,6 @@
 {
   "name": "injex",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Prompt-injection text toolkit for Chrome: 222 encoders, ciphers and Unicode tricks, a universal decoder, steganography and a hidden-text scanner.",
   "private": true,
   "type": "module",
@@ -10,7 +10,8 @@
   "scripts": {
     "test": "node test/run-tests.mjs",
     "sync:transforms": "node tools/sync-transforms.mjs",
-    "build:emoji": "node tools/build-emoji-data.mjs"
+    "build:emoji": "node tools/build-emoji-data.mjs",
+    "build:firefox": "node tools/build-firefox.mjs --zip dist/injex-firefox.zip"
   },
   "repository": "github:0xnookie/injex",
   "license": "AGPL-3.0-or-later"

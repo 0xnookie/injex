@@ -61,9 +61,14 @@
             <button data-v="decode">Decode</button>
           </div>
           <label class="tgl" title="Only transforms you starred"><input type="checkbox" id="tFav" /> Favorites</label>
+          <button class="btn ghost" id="tRecipeBtn" title="Chain transforms into a recipe (or click + on any row)">
+            <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+            Recipe
+          </button>
           <span class="spacer"></span>
           <span class="count" id="tCount"></span>
         </div>
+        <div class="recipe-bar" id="tRecipe" hidden></div>
         <main class="list" id="tList"></main>
       </section>
 
@@ -88,7 +93,7 @@
       <section class="view" data-view="stego">
         <div class="toolbar">
           <div class="seg" id="sMode">
-            <button data-v="bits" class="on" title="One variation selector (VS15/VS16) per bit, after a carrier emoji — P4RS3LT0NGV3's scheme">Emoji · bits</button>
+            <button data-v="bits" class="on" title="One variation selector (VS15/VS16) per bit, after a carrier emoji">Emoji · bits</button>
             <button data-v="bytes" title="One variation selector (VS1–VS256) per byte — 8× shorter">Emoji · bytes</button>
             <button data-v="tags" title="Every byte as an invisible Unicode tag character (U+E0000 + byte)">Invisible tags</button>
           </div>

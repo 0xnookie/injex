@@ -1,5 +1,4 @@
 // Delimiter / stop-sequence strings for prompt-injection research.
-// From P4RS3LT0NGV3 (https://github.com/elder-plinius/P4RS3LT0NGV3), AGPL-3.0.
 
 export const END_SEQUENCE_CATEGORIES = [
     {

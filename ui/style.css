@@ -65,6 +65,7 @@
   --c-signwriting: var(--teal);
   --c-special: var(--pink);
   --c-custom: var(--pink);
+  --c-recipe: var(--teal);
 }
 
 @media (prefers-color-scheme: light) {
@@ -1162,6 +1163,50 @@ body.full .narrow {
 .pill.signwriting { --c: var(--c-signwriting); }
 .pill.special { --c: var(--c-special); }
 .pill.custom { --c: var(--c-custom); }
+.pill.recipe { --c: var(--c-recipe); }
+
+/* recipe builder (Transform tab) */
+.recipe-bar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--c-recipe) 5%, var(--surface));
+}
+
+body.full .recipe-bar {
+  padding: 10px 20px;
+}
+
+.recipe-bar .chain {
+  flex: 1;
+  min-width: 0;
+}
+
+.recipe-bar .chain .chip {
+  cursor: pointer;
+}
+
+.recipe-bar .chain .chip:hover {
+  border-color: var(--critical);
+  color: var(--critical);
+}
+
+.recipe-out {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px/1.6 var(--mono);
+  color: var(--text);
+}
+
+.recipe-out.dim {
+  color: var(--muted);
+}
 
 .chip {
   --c: var(--text-2);

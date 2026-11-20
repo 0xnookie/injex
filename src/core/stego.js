@@ -1,6 +1,6 @@
 // Steganography: text hidden after an emoji in variation selectors, or as invisible Unicode tag characters.
 //
-//  - bits:  P4RS3LT0NGV3's scheme. Each UTF-8 bit becomes VS15 (0) or VS16 (1) after a carrier emoji.
+//  - bits:  each UTF-8 bit becomes VS15 (0) or VS16 (1) after a carrier emoji.
 //           Selectors, bit order, presentation selector and zero-width padding are configurable.
 //  - bytes: one variation selector per byte (VS1–VS16 = 0–15, VS17–VS256 = 16–255). Eight times shorter.
 //  - tags:  each UTF-8 byte as U+E0000 + byte (Unicode Tags block; ASCII lands on the real tag characters).

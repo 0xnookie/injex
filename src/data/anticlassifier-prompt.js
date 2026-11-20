@@ -1,5 +1,4 @@
 // System prompt for the Anti-Classifier rewrite (OpenRouter).
-// From P4RS3LT0NGV3 (https://github.com/elder-plinius/P4RS3LT0NGV3), AGPL-3.0.
 
 export const ANTICLASSIFIER_SYSTEM_PROMPT = `# IDENTITY AND PURPOSE
 

@@ -1,7 +1,7 @@
 // Settings page.
 
 import * as store from '../src/core/store.js';
-import { list, CATEGORIES, CATEGORY_ORDER, setCustomAlphabets } from '../src/core/registry.js';
+import { list, CATEGORIES, CATEGORY_ORDER, setCustomAlphabets, setRecipes } from '../src/core/registry.js';
 import { STEG_DEFAULTS, CARRIERS, encodeEmojiBits } from '../src/core/stego.js';
 import { MODEL_SUGGESTIONS, keyInfo, listModels } from '../src/core/openrouter.js';
 import { visualize } from '../src/core/scan.js';
@@ -9,6 +9,7 @@ import { $, h, debounce, matcher, twoClick, download } from './lib.js';
 
 const ext = typeof chrome !== 'undefined' && chrome.runtime?.id;
 let s = await store.get();
+setRecipes(s.recipes);
 setCustomAlphabets(s.customAlphabets);
 
 let savedTimer;
@@ -232,8 +233,15 @@ async function shortcuts() {
   for (const c of cmds) dl.append(h('dt', { text: label[c.name] || c.description || c.name }), h('dd', { text: c.shortcut || 'not set' }));
   if (!cmds.length) dl.append(h('dt', { text: 'Open injex' }), h('dd', { text: 'Alt+Shift+I' }), h('dt', { text: 'Decode the selection' }), h('dd', { text: 'Alt+Shift+D' }));
 }
-$('shortcutsBtn').addEventListener('click', () => {
-  if (ext) chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+const FIREFOX = typeof navigator !== 'undefined' && /\bFirefox\//.test(navigator.userAgent);
+if (FIREFOX && !chrome.commands?.openShortcutSettings) {
+  // Firefox < 137 has no API for it and extensions can't open about:addons
+  $('shortcutsBtn').replaceWith(h('span', { class: 'hint', text: 'Firefox: about:addons → ⚙ → Manage Extension Shortcuts' }));
+}
+$('shortcutsBtn')?.addEventListener('click', () => {
+  if (!ext) return;
+  if (chrome.commands?.openShortcutSettings) chrome.commands.openShortcutSettings();
+  else chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
 });
 
 // ── backup ──
@@ -287,16 +295,60 @@ function renderAll() {
   $('temp').value = s.temperature;
   $('histOn').checked = s.historyEnabled;
   $('histLimit').value = s.historyLimit;
+  setRecipes(s.recipes);
   setCustomAlphabets(s.customAlphabets);
   stegoForm();
   carriers();
   menu();
   histCount();
+  liveState();
 }
+
+// ── live scan (opt-in: needs read access to all sites) ──
+
+const ALL_SITES = { origins: ['<all_urls>'] };
+
+async function liveState() {
+  const granted = ext && (await chrome.permissions.contains(ALL_SITES));
+  $('liveOn').checked = !!s.autoScan && granted;
+}
+
+$('liveOn').addEventListener('change', async (e) => {
+  const msg = $('liveMsg');
+  if (!ext) return;
+  if (e.target.checked) {
+    let ok = false;
+    try {
+      ok = await chrome.permissions.request(ALL_SITES); // first await: still inside the click
+    } catch (err) {
+      msg.textContent = err.message || String(err);
+    }
+    if (!ok) {
+      e.target.checked = false;
+      msg.textContent ||= 'Permission not granted — live scan stays off.';
+      return;
+    }
+    await save({ autoScan: true });
+    msg.textContent = 'On: pages are scanned as they finish loading. Reload tabs that are already open to scan them.';
+  } else {
+    await save({ autoScan: false });
+    try {
+      await chrome.permissions.remove(ALL_SITES);
+    } catch {
+      /* already gone */
+    }
+    msg.textContent = 'Off: the permission to read all sites was given back.';
+  }
+});
 
 store.onChange((changes) => {
   for (const [k, v] of Object.entries(changes)) s[k] = v.newValue;
   if (changes.history) histCount();
+  if (changes.autoScan) liveState();
+  if (changes.recipes) {
+    setRecipes(s.recipes);
+    menu();
+  }
   if (changes.customAlphabets) {
     setCustomAlphabets(s.customAlphabets);
     menu();

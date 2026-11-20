@@ -1,9 +1,9 @@
 // Transform: every encoder / cipher / Unicode trick applied to the input as you type.
 // Rows are filled lazily (only the ones scrolled into view) so 220+ transforms stay instant.
 
-import { list, CATEGORIES, CATEGORY_ORDER, encode, decode, canDecode, optionsFor, setOptionPrefs } from '../../src/core/registry.js';
+import { list, transforms, CATEGORIES, CATEGORY_ORDER, encode, decode, canDecode, optionsFor, setOptionPrefs, setRecipes, makeRecipeTransform, slug } from '../../src/core/registry.js';
 import { visualize } from '../../src/core/scan.js';
-import { $, h, debounce, matcher, seg, empty, sizeStat, optionsForm, clip, paste, row, mini, keepDraft, setValue } from '../lib.js';
+import { $, h, debounce, matcher, seg, empty, sizeStat, optionsForm, clip, paste, row, mini, keepDraft, setValue, twoClick } from '../lib.js';
 
 const SAMPLE = 'Hello world';
 // anything that renders: not whitespace, format/control characters, variation selectors or tags
@@ -104,6 +104,7 @@ function makeRow(t) {
     h('span', { class: 'label', text: t.name, title: t.description || t.name }),
     t.configurableOptions?.length ? h('span', { class: 'chip dim', title: 'Has options — open the row', text: 'options' }) : null,
     h('span', { class: 'spacer' }),
+    t.category !== 'recipe' ? mini('', () => addStep(t.key), { iconName: 'plus', title: 'Add to recipe' }) : null,
     fav,
     mini('Copy', () => copyRow(r), { iconName: 'copy', title: 'Copy the output' }),
   ];
@@ -160,6 +161,8 @@ function makeRow(t) {
                 'Reset options',
               )
             : null,
+          t.category === 'recipe' ? h('button', { class: 'btn', title: 'Load this recipe into the builder', onclick: () => editRecipe(t) }, 'Edit') : null,
+          t.category === 'recipe' ? deleteRecipeBtn(t) : null,
           h('span', { class: 'spacer' }),
           meta,
           h(
@@ -251,7 +254,9 @@ export async function init(c) {
   const onInput = debounce(() => {
     if (dir.get() === 'decode') render();
     refreshAll();
+    renderRecipe();
   }, 90);
+  $('tRecipeBtn').addEventListener('click', () => ($('tRecipe').hidden ? openRecipe() : closeRecipe()));
   input.addEventListener('input', onInput);
   $('tFilter').addEventListener('input', debounce(render, 80));
   $('tFilter').addEventListener('keydown', (e) => {
@@ -285,9 +290,116 @@ export function activate(payload) {
 }
 
 export function onSettings(changes) {
-  if (changes.customAlphabets) {
-    render();
-    ctx.setCount('transform', list().length);
-  }
+  if (changes.customAlphabets || changes.recipes) render();
   if (changes.favorites && !document.querySelector('.view[data-view="transform"].active')) render();
+}
+
+// ── recipe builder ──
+
+const recipe = { steps: [], name: '', editing: null };
+
+function openRecipe() {
+  $('tRecipe').hidden = false;
+  renderRecipe();
+}
+
+function closeRecipe() {
+  $('tRecipe').hidden = true;
+  Object.assign(recipe, { steps: [], name: '', editing: null });
+}
+
+function addStep(key) {
+  recipe.steps.push(key);
+  openRecipe();
+}
+
+function editRecipe(t) {
+  const saved = (ctx.settings.recipes || []).find((r) => r.name === t.name);
+  Object.assign(recipe, { steps: [...(saved?.steps || t.steps || [])], name: t.name, editing: t.name });
+  openRecipe();
+}
+
+function deleteRecipeBtn(t) {
+  const b = h('button', { class: 'btn ghost' }, 'Delete');
+  twoClick(
+    b,
+    async () => {
+      const next = (ctx.settings.recipes || []).filter((r) => r.name !== t.name);
+      setRecipes(next);
+      await ctx.save({ recipes: next });
+      if (recipe.editing === t.name) recipe.editing = null;
+      ctx.toast(`Deleted recipe “${t.name}”`);
+    },
+    'Delete recipe?',
+  );
+  return b;
+}
+
+function recipeResult() {
+  const t = makeRecipeTransform({ name: 'draft', steps: recipe.steps });
+  return encode(t, input.value || SAMPLE);
+}
+
+async function saveRecipe() {
+  const name = recipe.name.trim();
+  if (!recipe.steps.length) return ctx.toast('Add at least one step with + on a transform', true);
+  if (!name) return ctx.toast('Give the recipe a name', true);
+  const others = (ctx.settings.recipes || []).filter((r) => r.name !== recipe.editing && r.name !== name);
+  if (others.some((r) => slug(r.name) === slug(name))) return ctx.toast('A recipe with a similar name exists', true);
+  const next = [...others, { name, steps: [...recipe.steps] }].sort((a, b) => a.name.localeCompare(b.name));
+  setRecipes(next);
+  await ctx.save({ recipes: next });
+  recipe.editing = name;
+  renderRecipe();
+  ctx.toast(`Saved “${name}” — find it under Recipes, in Decode and in the right-click menu settings`);
+}
+
+function renderRecipe() {
+  const bar = $('tRecipe');
+  if (bar.hidden) return;
+  bar.textContent = '';
+  const chain = h('div', { class: 'chain' });
+  recipe.steps.forEach((k, i) => {
+    if (i) chain.append(h('span', { class: 'arrow', text: '→' }));
+    chain.append(
+      h(
+        'button',
+        {
+          class: 'chip cyan',
+          title: 'Remove this step',
+          onclick: () => {
+            recipe.steps.splice(i, 1);
+            renderRecipe();
+          },
+        },
+        transforms[k]?.name || k,
+        ' ×',
+      ),
+    );
+  });
+  if (!recipe.steps.length) chain.append(h('span', { class: 'muted small', text: 'Click + on any transform to add a step — steps run left to right, decoding runs them backwards.' }));
+  bar.append(
+    h(
+      'div',
+      { class: 'inline-row' },
+      h('span', { class: 'pill recipe', text: 'RECIPE' }),
+      chain,
+      h('input', { type: 'text', value: recipe.name, placeholder: 'Recipe name', style: 'width: 160px', oninput: (e) => (recipe.name = e.target.value), onkeydown: (e) => e.key === 'Enter' && saveRecipe() }),
+      h('button', { class: 'btn primary', onclick: saveRecipe }, recipe.editing ? 'Update' : 'Save'),
+      h('button', { class: 'btn ghost', onclick: closeRecipe }, 'Close'),
+    ),
+  );
+  if (!recipe.steps.length) return;
+  const res = recipeResult();
+  const shown = !res.ok ? res.error : VISIBLE.test(res.text) ? res.text.slice(0, 600) : visualize(res.text, 300);
+  bar.append(
+    h(
+      'div',
+      { class: 'inline-row' },
+      h('span', { class: 'muted small', text: input.value ? 'Output' : `Preview (“${SAMPLE}”)` }),
+      h('span', { class: 'recipe-out' + (res.ok && input.value ? '' : ' dim'), title: res.ok ? sizeStat(res.text) : '', text: shown }),
+      res.ok && input.value ? mini('Copy', () => ctx.copy(res.text, recipe.name.trim() || 'Recipe'), { iconName: 'copy', primary: true }) : null,
+      res.ok && input.value ? mini('Use as input', () => setValue(input, res.text)) : null,
+    ),
+  );
 }
