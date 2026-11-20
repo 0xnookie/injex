@@ -3,6 +3,7 @@
 
 import { scanText, scanPage, collectPage, locateInPage, stripHidden, KINDS, SEVERITY_ORDER } from '../../src/core/scan.js';
 import { setScanBadge } from '../../src/core/badge.js';
+import { liveScanAllowed, siteMatches } from '../../src/core/sites.js';
 import { $, h, icon, debounce, seg, empty, clip, row, mini, ago, keepDraft, setValue, busy } from '../lib.js';
 
 let ctx;
@@ -51,6 +52,32 @@ function findingRow(f, i) {
       box.append(actions);
     },
   });
+}
+
+/** With live scan on: a button to take this site out of it (or put it back). */
+function liveSiteButton() {
+  const s = ctx.settings;
+  if (!s.autoScan || !/^https?:/i.test(last?.url || '')) return null;
+  let host;
+  try {
+    host = new URL(last.url).hostname.replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+  const mode = s.liveMode === 'only' ? 'only' : 'all';
+  const sites = s.liveSites || [];
+  const on = liveScanAllowed(last.url, mode, sites);
+  const drop = sites.filter((p) => !siteMatches(last.url, [p]));
+  const next = (mode === 'all') === on ? [...sites, host] : drop;
+  return mini(
+    on ? 'Don’t live-scan this site' : 'Live-scan this site',
+    async () => {
+      await ctx.save({ liveSites: next });
+      ctx.toast(on ? `Live scan skips ${host} now` : `Live scan covers ${host} again`);
+      render();
+    },
+    { title: on ? `Add ${host} to the live-scan exceptions (Settings → Live scan)` : `Live-scan ${host} again` },
+  );
 }
 
 /** Copy the pasted text without hidden characters and with look-alike letters fixed. */
@@ -105,6 +132,7 @@ function render() {
         h('span', { title: last.url, text: `${last.title || last.url} — ${last.chunks.toLocaleString()} suspicious chunk${last.chunks === 1 ? '' : 's'} in ${last.frames} frame${last.frames === 1 ? '' : 's'}${last.truncated ? ' (truncated)' : ''}` }),
         h('span', { class: 'spacer' }),
         h('span', { class: 'muted small', text: ago(last.at) }),
+        liveSiteButton(),
       );
     }
   }

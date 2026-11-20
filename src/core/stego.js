@@ -9,11 +9,11 @@ const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8', { fatal: false });
 
 export const STEG_DEFAULTS = {
-  bitZeroVS: '︎',
-  bitOneVS: '️',
+  bitZeroVS: '\uFE0E',
+  bitOneVS: '\uFE0F',
   initialPresentation: 'emoji', // 'emoji' | 'text' | 'none'
-  trailingZW: '​', // '' for none
-  interBitZW: '', // e.g. '‌'
+  trailingZW: '\u200B', // '' for none
+  interBitZW: '', // e.g. '\u200C'
   interBitEvery: 1,
   bitOrder: 'msb', // 'msb' | 'lsb'
 };
@@ -44,8 +44,8 @@ export function encodeEmojiBits(carrier, text, options = {}) {
   if (!text) return carrier;
   const bits = Array.from(enc.encode(text), (b) => byteBits(b, o.bitOrder)).join('');
   let out = carrier;
-  if (o.initialPresentation === 'emoji') out += '️';
-  else if (o.initialPresentation === 'text') out += '︎';
+  if (o.initialPresentation === 'emoji') out += '\uFE0F';
+  else if (o.initialPresentation === 'text') out += '\uFE0E';
   const every = Math.max(1, Number(o.interBitEvery) || 1);
   for (let i = 0; i < bits.length; i++) {
     out += bits[i] === '0' ? o.bitZeroVS : o.bitOneVS;
@@ -62,7 +62,7 @@ export function decodeEmojiBits(text, options = {}) {
   const zero = o.bitZeroVS;
   const one = o.bitOneVS;
   // the longest run of selectors (optionally interleaved with zero-width padding)
-  const runs = text.match(/[︎️][︎️​‌‍⁠﻿]*/g) || [];
+  const runs = text.match(/[\uFE0E\uFE0F][\uFE0E\uFE0F\u200B\u200C\u200D\u2060\uFEFF]*/g) || [];
   let best = '';
   for (const r of runs) if (r.length > best.length) best = r;
   const sel = [...best].filter((c) => c === zero || c === one);
@@ -103,7 +103,7 @@ export function encodeEmojiBytes(carrier, text) {
 /** Recover text hidden by encodeEmojiBytes (longest selector run). */
 export function decodeEmojiBytes(text) {
   if (!text) return '';
-  const runs = text.match(/(?:[︀-️]|\udb40[\udd00-\uddef])+/g) || [];
+  const runs = text.match(/(?:[\uFE00-\uFE0F]|\udb40[\udd00-\uddef])+/g) || [];
   let best = '';
   for (const r of runs) if ([...r].length > [...best].length) best = r;
   const bytes = [...best].map((c) => byteForVs(c.codePointAt(0))).filter((b) => b >= 0);

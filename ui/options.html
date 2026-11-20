@@ -44,10 +44,42 @@
         <div class="opt-grid">
           <label class="opt">
             <input type="checkbox" id="liveOn" />
-            <div><b>Scan pages as they load</b><span>The badge counts critical and high findings: red when a page hides instructions in invisible characters or emoji steganography, orange for hidden instructions in CSS or comments. Open the popup to see them.</span></div>
+            <div><b>Scan pages as they load</b><span>The badge counts critical and high findings: red when a page hides instructions in invisible characters or emoji steganography, orange for hidden instructions in CSS or comments. Pages that keep adding text — chats, mail, feeds — are scanned again once new text settles. Open the popup to see the findings.</span></div>
           </label>
         </div>
         <small class="hint" id="liveMsg"></small>
+        <div class="field" style="margin-top: 16px">
+          <div class="inline-row">
+            <span class="lbl" style="margin: 0">Sites</span>
+            <select id="liveMode" title="Which sites live scan looks at">
+              <option value="all">Every site, except these</option>
+              <option value="only">Only these sites</option>
+            </select>
+          </div>
+          <textarea id="liveSites" class="mono" rows="3" spellcheck="false" placeholder="one per line: example.com (and its subdomains), *.example.*, # comments"></textarea>
+          <small id="liveSitesMsg">The popup’s Scan tab can add or remove the current site too.</small>
+        </div>
+      </section>
+
+      <section class="card" id="paste">
+        <h2>Paste guard</h2>
+        <p>Hold a paste into an AI chat when the text hides something — invisible Unicode tags, emoji steganography, zero-width runs, bidi overrides, invisible letters or look-alike letters — and choose: paste it cleaned, paste it as is, or cancel. Pastes without such characters go through untouched. Needs permission for the sites below; the check runs locally.</p>
+        <div class="opt-grid">
+          <label class="opt">
+            <input type="checkbox" id="pasteOn" />
+            <div><b>Check what I paste into AI chats</b><span>Enter pastes cleaned, Esc cancels. Typing into the chat is never touched — only pastes.</span></div>
+          </label>
+        </div>
+        <small class="hint" id="pasteMsg"></small>
+        <div class="field" style="margin-top: 16px">
+          <span class="lbl">Sites</span>
+          <textarea id="pasteSites" class="mono" rows="5" spellcheck="false" placeholder="one per line: chatgpt.com, claude.ai …"></textarea>
+          <div class="row-actions" style="margin-top: 8px">
+            <button class="btn" id="pasteSave" type="button">Save sites</button>
+            <button class="btn ghost" id="pasteReset" type="button">AI chat defaults</button>
+            <span class="hint" id="pasteSitesMsg"></span>
+          </div>
+        </div>
       </section>
 
       <section class="card" id="ai">
@@ -174,6 +206,8 @@
           <dd><a href="https://github.com/niieani/gpt-tokenizer" target="_blank" rel="noopener">gpt-tokenizer</a> (MIT)</dd>
           <dt>Codes</dt>
           <dd>node-qrcode (MIT), JsBarcode (MIT), ZXing (Apache-2.0)</dd>
+          <dt>Unicode data</dt>
+          <dd>Unicode Character Database 17.0 (Unicode License v3)</dd>
           <dt>Fonts</dt>
           <dd>Inter and JetBrains Mono (SIL OFL 1.1)</dd>
           <dt>License</dt>

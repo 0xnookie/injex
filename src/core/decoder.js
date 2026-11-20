@@ -232,7 +232,7 @@ export function peel(input, { maxLayers = 8, minPriority = 60, stego, branch = 3
 // ── language hints ──
 
 const SCRIPTS = [
-  ['Arabic', /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/g],
+  ['Arabic', /[\u0600-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-\uFEFF]/g],
   ['Chinese', /[一-鿿㐀-䶿]/g],
   ['Japanese', /[぀-ゟ゠-ヿㇰ-ㇿ]/g],
   ['Korean', /[가-힯ᄀ-ᇿ㄰-㆏]/g],

@@ -4,16 +4,21 @@
 //   Remove hidden characters         strips tags / selector runs / zero-width / bidi, fixes look-alikes
 //   Hide selection in emoji          emoji steganography with the carrier from the popup
 //   Scan page for hidden text        opens the dashboard with what the scanner found
-// plus the opt-in live scan: every page that finishes loading is scanned and the toolbar badge counts
-// critical / high findings. Everything runs locally; without live scan, activeTab (granted by the menu
-// click / shortcut) is the only page access.
+//   Inspect characters               opens the Inspect tab with the selection
+// plus two opt-in features that need host permissions:
+//   live scan    pages are scanned as they load and again when new text settles; the toolbar badge
+//                counts critical / high findings (all sites, minus or only the ones listed in Settings)
+//   paste guard  a content script on AI chat sites holds pastes that hide text and asks what to do
+// Everything runs locally; without them, activeTab (granted by the menu click / shortcut) is the only
+// page access.
 
 import { transforms, encode, setOptionPrefs, setCustomAlphabets, setRecipes } from './core/registry.js';
 import { peel, universalDecode, englishness } from './core/decoder.js';
 import { encodeEmojiBits, encodeTags } from './core/stego.js';
-import { collectPage, scanPage, stripHidden } from './core/scan.js';
+import { collectPage, scanPage, stripHidden, checkPaste } from './core/scan.js';
 import { setScanBadge } from './core/badge.js';
-import { captureSelection, applyResult } from './page.js';
+import { liveScanAllowed, matchPatterns } from './core/sites.js';
+import { captureSelection, applyResult, watchPage } from './page.js';
 import * as store from './core/store.js';
 
 async function loadPrefs() {
@@ -40,6 +45,7 @@ async function buildMenu() {
   chrome.contextMenus.create({ id: 'enc-sep', parentId: 'encode', type: 'separator', contexts: sel });
   chrome.contextMenus.create({ id: 'enc:__more', parentId: 'encode', title: 'Choose transforms…', contexts: sel });
   chrome.contextMenus.create({ id: 'clean', parentId: 'root', title: 'Remove hidden characters', contexts: sel });
+  chrome.contextMenus.create({ id: 'inspect', parentId: 'root', title: 'Inspect characters', contexts: sel });
   chrome.contextMenus.create({ id: 'sep0', parentId: 'root', type: 'separator', contexts: sel });
   chrome.contextMenus.create({ id: 'stego', parentId: 'root', title: 'Hide selection in emoji', contexts: sel });
   chrome.contextMenus.create({ id: 'tags', parentId: 'root', title: 'Make selection invisible (Unicode tags)', contexts: sel });
@@ -48,11 +54,21 @@ async function buildMenu() {
   chrome.contextMenus.create({ id: 'open', parentId: 'root', title: 'Open dashboard', contexts: ['selection', 'page', 'editable'] });
 }
 
-chrome.runtime.onInstalled.addListener(buildMenu);
-chrome.runtime.onStartup.addListener(buildMenu);
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && (changes.menuTransforms || changes.customAlphabets || changes.recipes)) buildMenu();
+chrome.runtime.onInstalled.addListener(() => {
+  buildMenu();
+  syncPasteGuard();
 });
+chrome.runtime.onStartup.addListener(() => {
+  buildMenu();
+  syncPasteGuard();
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.menuTransforms || changes.customAlphabets || changes.recipes) buildMenu();
+  if (changes.pasteGuard || changes.pasteSites) syncPasteGuard({ injectOpenTabs: !!changes.pasteGuard?.newValue || !!changes.pasteSites });
+});
+chrome.permissions.onAdded?.addListener(() => syncPasteGuard());
+chrome.permissions.onRemoved?.addListener(() => syncPasteGuard());
 
 // ── page helpers ──
 
@@ -165,6 +181,13 @@ async function runScan(tab) {
   return scan;
 }
 
+async function doInspect(tab, frameId, selectionText) {
+  const { sel } = await grabSelection(tab.id, frameId, selectionText);
+  const text = sel?.text || selectionText || '';
+  await chrome.storage.session.set({ inspectText: text });
+  chrome.tabs.create({ url: chrome.runtime.getURL('ui/app.html?full=1#inspect'), index: tab.index + 1 });
+}
+
 async function doScan(tab) {
   let scan;
   try {
@@ -180,12 +203,19 @@ async function doScan(tab) {
 
 const ALL_SITES = { origins: ['<all_urls>'] };
 
+/** Is live scan on, allowed for `url`, and do we have the permission? */
+async function liveScanFor(url) {
+  const s = await store.get(['autoScan', 'liveMode', 'liveSites']);
+  return !!s.autoScan && liveScanAllowed(url, s.liveMode, s.liveSites) && (await chrome.permissions.contains(ALL_SITES));
+}
+
 chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== 'complete' || !/^https?:/i.test(tab.url || '')) return;
   try {
-    const { autoScan } = await store.get(['autoScan']);
-    if (!autoScan || !(await chrome.permissions.contains(ALL_SITES))) return;
+    if (!(await liveScanFor(tab.url))) return;
     await runScan(tab);
+    // pages keep adding text (chats, mail, feeds): rescan when it settles
+    await chrome.scripting.executeScript({ target: { tabId }, func: watchPage });
   } catch {
     /* pages that can't be scripted (web stores, PDFs, error pages) */
   }
@@ -193,11 +223,70 @@ chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => chrome.storage.session.remove('scan:' + tabId).catch(() => {}));
 
+const lastRescan = new Map(); // tabId → time, so a burst of messages costs one scan
+async function rescan(tab) {
+  if (!tab?.id || !(await liveScanFor(tab.url))) return { stop: true };
+  const now = Date.now();
+  if (now - (lastRescan.get(tab.id) || 0) < 3000) return {};
+  lastRescan.set(tab.id, now);
+  try {
+    await runScan(tab);
+  } catch {
+    return { stop: true };
+  }
+  return {};
+}
+
+// ── paste guard (opt-in in Settings; needs permission for the listed sites) ──
+
+const PASTE_SCRIPT = 'injex-paste-guard';
+let pasteSync = Promise.resolve();
+
+/** Register the paste-guard content script for the sites we have permission for (or remove it). */
+function syncPasteGuard({ injectOpenTabs = false } = {}) {
+  pasteSync = pasteSync
+    .then(async () => {
+      const { pasteGuard, pasteSites } = await store.get(['pasteGuard', 'pasteSites']);
+      const registered = await chrome.scripting.getRegisteredContentScripts({ ids: [PASTE_SCRIPT] }).catch(() => []);
+      if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: [PASTE_SCRIPT] });
+      if (!pasteGuard) return;
+      const matches = [];
+      for (const p of matchPatterns(pasteSites)) if (await chrome.permissions.contains({ origins: [p] })) matches.push(p);
+      if (!matches.length) return;
+      const script = { id: PASTE_SCRIPT, js: ['src/content/paste-guard.js'], matches, runAt: 'document_start', allFrames: true };
+      try {
+        await chrome.scripting.registerContentScripts([{ ...script, persistAcrossSessions: true }]);
+      } catch {
+        await chrome.scripting.registerContentScripts([script]); // browsers without persistAcrossSessions (re-registered on startup)
+      }
+      if (!injectOpenTabs) return;
+      // tabs that are already open get it now, not on their next load
+      for (const tab of await chrome.tabs.query({ url: matches })) {
+        chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['src/content/paste-guard.js'] }).catch(() => {});
+      }
+    })
+    .catch((e) => console.warn('injex: paste guard', e));
+  return pasteSync;
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === 'injex:paste-check') {
+    sendResponse(checkPaste(msg.text));
+    return false;
+  }
+  if (msg?.type === 'injex:changed') {
+    rescan(sender.tab).then(sendResponse, () => sendResponse({ stop: true }));
+    return true;
+  }
+  return false;
+});
+
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const id = String(info.menuItemId);
   try {
     if (id === 'decode') return await doDecode(tab, info.frameId, info.selectionText);
     if (id === 'clean') return await doClean(tab, info.frameId, info.selectionText);
+    if (id === 'inspect') return await doInspect(tab, info.frameId, info.selectionText);
     if (id === 'stego' || id === 'tags') return await doStego(tab, info.frameId, info.selectionText, id);
     if (id === 'scan') return await doScan(tab);
     if (id === 'open') return chrome.tabs.create({ url: chrome.runtime.getURL('ui/app.html?full=1') });

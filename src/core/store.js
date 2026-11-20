@@ -1,16 +1,18 @@
 // Settings and user data in chrome.storage.local (falls back to localStorage outside the extension,
 // e.g. when the UI is opened from a dev server for screenshots).
 
+import { PASTE_SITES } from './sites.js';
+
 export const DEFAULTS = {
   theme: 'auto', // 'auto' | 'dark' | 'light'
   favorites: ['base64', 'hex', 'binary', 'rot13', 'invisible_text', 'zerowidth_steganography', 'leetspeak', 'upside_down'],
   optionPrefs: {}, // { [transform name]: { [option id]: value } }
   menuTransforms: ['base64', 'hex', 'binary', 'url', 'rot13', 'morse', 'leetspeak', 'upside_down', 'fullwidth', 'zalgo', 'invisible_text', 'zerowidth_steganography'],
   stego: {
-    bitZeroVS: '︎',
-    bitOneVS: '️',
+    bitZeroVS: '\uFE0E',
+    bitOneVS: '\uFE0F',
     initialPresentation: 'emoji',
-    trailingZW: '​',
+    trailingZW: '\u200B',
     interBitZW: '',
     interBitEvery: 1,
     bitOrder: 'msb',
@@ -19,6 +21,10 @@ export const DEFAULTS = {
   customAlphabets: [], // [{ name, theme, words: [26] }]
   recipes: [], // [{ name, steps: [transform keys] }]
   autoScan: false, // live scan of every page (needs the optional host permission)
+  liveMode: 'all', // 'all': every site except liveSites · 'only': just liveSites
+  liveSites: [], // host patterns (core/sites.js)
+  pasteGuard: false, // check pastes into AI chats for hidden text (needs permission for pasteSites)
+  pasteSites: [...PASTE_SITES],
   history: [], // [{ text, source, at }]
   historyEnabled: true,
   historyLimit: 100,

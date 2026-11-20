@@ -6,6 +6,7 @@
 //  zero-width  runs of zero-width characters (ZWSP, ZWNJ, ZWJ, WJ, BOM …) — zero-width steganography
 //  bidi        bidirectional overrides / isolates — text that renders in a different order ("Trojan Source")
 //  homoglyph   words mixing Latin with Cyrillic / Greek look-alikes
+//  filler      Hangul fillers and other blank "letters" — invisible identifiers in code ("invisible backdoor")
 //  css-hidden  page text hidden with CSS (display:none, zero size, transparent, off-screen …) — page scans only
 //  comment     HTML comments with sentence-like text — page scans only
 //
@@ -21,6 +22,7 @@ export const KINDS = {
   'zero-width': { label: 'Zero-width', short: 'ZERO-W', desc: 'Zero-width characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM …). Used for watermarks, fingerprinting and zero-width steganography.' },
   bidi: { label: 'Bidi control', short: 'BIDI', desc: 'Bidirectional override / isolate characters. Text can render in a different order than it is read ("Trojan Source").' },
   homoglyph: { label: 'Homoglyphs', short: 'HOMOGL', desc: 'Words mixing Latin letters with Cyrillic or Greek look-alikes (spoofing, filter evasion).' },
+  filler: { label: 'Invisible letters', short: 'FILLER', desc: 'Hangul fillers and similar characters that render blank but count as letters: invisible identifiers in code (the "invisible backdoor") or invisible padding in text.' },
   'css-hidden': { label: 'CSS-hidden text', short: 'HIDDEN', desc: 'Text in the page that CSS hides from view (display:none, zero size, transparent, clipped or off-screen) but that is still in the DOM — and in what an AI agent or summarizer reads.' },
   comment: { label: 'HTML comment', short: 'COMMENT', desc: 'Sentence-like text in an HTML comment: invisible on the page, present in the source.' },
 };
@@ -44,14 +46,27 @@ export function looksLikeInstructions(s) {
   return INSTRUCTION.test(s || '');
 }
 
-const ZW = '​‌‍⁠⁡⁢⁣⁤﻿᠎͏';
+const ZW = '\u200B\u200C\u200D\u2060\u2061\u2062\u2063\u2064\uFEFF\u180E\u034F';
 const RE = {
   tags: /(?:\udb40[\udc00-\udc7f])+/g,
-  vsBits: /[︎️](?:[︎️​‌‍⁠﻿]){15,}/g,
-  vsBytes: /(?:[︀-️]|\udb40[\udd00-\uddef]){2,}/g,
+  vsBits: /[\uFE0E\uFE0F](?:[\uFE0E\uFE0F\u200B\u200C\u200D\u2060\uFEFF]){15,}/g,
+  vsBytes: /(?:[\uFE00-\uFE0F]|\udb40[\udd00-\uddef]){2,}/g,
   zw: new RegExp(`[${ZW}]{2,}|[${ZW}]`, 'g'),
-  bidi: /[‪-‮⁦-⁩‎‏؜]/g,
+  bidi: /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g,
+  filler: /[\u115F\u1160\u3164\uFFA0]+/g,
 };
+
+// ZWNJ / ZWJ between two letters of a script that uses them (Persian, Arabic, Indic …) are spelling, not hiding
+// (a letter outside Latin, or a combining mark of such a script — Devanagari's virama comes before its ZWJ)
+const NON_LATIN_LETTER = /[^\P{L}A-Za-z\u{C0}-\u{24F}]|[^\P{M}\u{300}-\u{36F}\u{FE00}-\u{FE0F}]/u;
+const joinerInWord = (text, m) => m[0].length === 1 && (m[0] === '\u200C' || m[0] === '\u200D') && NON_LATIN_LETTER.test(text[m.index - 1] || '') && NON_LATIN_LETTER.test(text[m.index + 1] || '');
+
+// \uD83C\uDFF4 + tag letters + CANCEL TAG is a subdivision flag emoji (England, Scotland, Wales \u2026), not hidden text
+const FLAG_TAGS = /^[\u{E0061}-\u{E007A}\u{E0030}-\u{E0039}]{2,7}\u{E007F}$/u;
+/** Is the tag run `run` at `index` of `text` the tag part of a flag emoji? */
+export function isFlagTags(text, index, run) {
+  return text.slice(Math.max(0, index - 2), index) === '\u{1F3F4}' && FLAG_TAGS.test(run);
+}
 
 const NAMES = {
   0x200b: 'ZWSP',
@@ -79,6 +94,10 @@ const NAMES = {
   0x061c: 'ALM',
   0xfe0e: 'VS15',
   0xfe0f: 'VS16',
+  0x3164: 'HF',
+  0x115f: 'HCF',
+  0x1160: 'HJF',
+  0xffa0: 'HWHF',
 };
 
 /** Render invisible characters visibly: "a⟨ZWSP⟩b", tag chars as ⟨tag:x⟩ runs collapsed. */
@@ -139,6 +158,7 @@ export function scanText(text, opts = {}) {
   };
 
   for (const m of text.matchAll(RE.tags)) {
+    if (isFlagTags(text, m.index, m[0])) continue;
     const payload = decodeTags(m[0]);
     const n = [...m[0]].length;
     const instr = looksLikeInstructions(payload);
@@ -191,7 +211,7 @@ export function scanText(text, opts = {}) {
   }
 
   // zero-width: one finding per string, with every run counted; try the zero-width steganography decoder
-  const zw = [...text.matchAll(RE.zw)].filter((m) => !isCovered(m.index, m.index + m[0].length));
+  const zw = [...text.matchAll(RE.zw)].filter((m) => !isCovered(m.index, m.index + m[0].length) && !joinerInWord(text, m));
   if (zw.length) {
     const total = zw.reduce((n, m) => n + [...m[0]].length, 0);
     const longest = zw.reduce((a, m) => (m[0].length > a[0].length ? m : a));
@@ -205,8 +225,8 @@ export function scanText(text, opts = {}) {
         /* not zero-width stego */
       }
     }
-    // a lone ZWJ inside an emoji sequence (👨‍👩‍👧) or a BOM at the very start is normal
-    const benign = zw.every((m) => (m[0] === '‍' && /\p{Extended_Pictographic}/u.test(text.slice(Math.max(0, m.index - 2), m.index + 3))) || (m[0] === '﻿' && m.index === 0));
+    // a lone ZWJ inside an emoji sequence (👨\u200D👩\u200D👧) or a BOM at the very start is normal
+    const benign = zw.every((m) => (m[0] === '\u200D' && /\p{Extended_Pictographic}/u.test(text.slice(Math.max(0, m.index - 2), m.index + 3))) || (m[0] === '\uFEFF' && m.index === 0));
     if (!benign) {
       push({
         kind: 'zero-width',
@@ -224,7 +244,7 @@ export function scanText(text, opts = {}) {
 
   const bidi = [...text.matchAll(RE.bidi)];
   if (bidi.length) {
-    const overrides = bidi.filter((m) => /[‭‮]/.test(m[0])).length;
+    const overrides = bidi.filter((m) => /[\u202D\u202E]/.test(m[0])).length;
     const first = bidi[0];
     push({
       kind: 'bidi',
@@ -235,6 +255,22 @@ export function scanText(text, opts = {}) {
       payload: '',
       ctx: context(text, first.index, first.index + 1),
       note: `${bidi.length} bidi control${bidi.length === 1 ? '' : 's'}${overrides ? `, ${overrides} override${overrides === 1 ? '' : 's'} (LRO/RLO)` : ''}`,
+    });
+  }
+
+  const fillers = [...text.matchAll(RE.filler)];
+  if (fillers.length) {
+    const first = fillers[0];
+    const n = fillers.reduce((s, m) => s + m[0].length, 0);
+    push({
+      kind: 'filler',
+      severity: 'high',
+      start: first.index,
+      end: first.index + first[0].length,
+      count: n,
+      payload: '',
+      ctx: context(text, first.index, first.index + first[0].length),
+      note: `${n} blank letter${n === 1 ? '' : 's'} (Hangul filler)`,
     });
   }
 
@@ -290,7 +326,7 @@ export function scanPage(collected, opts = {}) {
  * Returns { url, title, chunks: [{ where: 'text'|'attr'|'css-hidden'|'comment'|'title', path, attr?, text, why? }], truncated }.
  */
 export function collectPage() {
-  const SUSPICIOUS = /[​-‏‪-‮⁠-⁤⁦-⁩﻿᠎͏؜︀-️]|\udb40[\udc00-\udfff]|[A-Za-z][Ѐ-ӿͰ-Ͽ]|[Ѐ-ӿͰ-Ͽ][A-Za-z]/;
+  const SUSPICIOUS = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u180E\u034F\u061C\uFE00-\uFE0F\u115F\u1160\u3164\uFFA0]|\udb40[\udc00-\udfff]|[A-Za-z][Ѐ-ӿͰ-Ͽ]|[Ѐ-ӿͰ-Ͽ][A-Za-z]/;
   const MAX_CHUNKS = 3000;
   const chunks = [];
   let truncated = false;
@@ -395,7 +431,7 @@ export function collectPage() {
 // ── cleaning ──
 
 // Latin look-alikes from Cyrillic and Greek, only applied inside words that mix scripts
-const CONFUSABLES = {
+export const CONFUSABLES = {
   а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ј: 'j', ѕ: 's', ԁ: 'd', һ: 'h', ӏ: 'l', ԛ: 'q', ԝ: 'w', ь: 'b',
   А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', Х: 'X', У: 'Y', І: 'I', Ј: 'J', Ѕ: 'S',
   Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X', ο: 'o', ϲ: 'c', Ϲ: 'C',
@@ -404,9 +440,9 @@ const CONFUSABLES = {
 /**
  * Remove what a reader can't see and fix look-alike letters:
  * Unicode tags, runs of variation selectors (single VS15/VS16 after a character stay), zero-width
- * characters (a ZWJ inside an emoji sequence and a ZWNJ between non-Latin letters stay), invisible
- * operators, BOM, soft hyphens, bidi embeddings / overrides / isolates, and Cyrillic / Greek letters
- * inside words that also contain Latin ones.
+ * characters (a ZWJ inside an emoji sequence, and a ZWJ / ZWNJ between non-Latin letters, stay),
+ * invisible operators, BOM, soft hyphens, Hangul fillers, bidi embeddings / overrides / isolates, and
+ * Cyrillic / Greek letters inside words that also contain Latin ones.
  * @returns {{ text: string, removed: number, replaced: number }}
  */
 export function stripHidden(input) {
@@ -420,12 +456,12 @@ export function stripHidden(input) {
       return '';
     });
   };
-  drop(/(?:\udb40[\udc00-\udc7f])+/g); // tags
-  drop(/(?:[︀-️]|\udb40[\udd00-\uddef]){2,}/g); // selector runs (emoji / byte steganography)
+  drop(/(?:\udb40[\udc00-\udc7f])+/g, (m, i) => isFlagTags(s, i, m)); // tags (flag emoji stay)
+  drop(/(?:[\uFE00-\uFE0F]|\udb40[\udd00-\uddef]){2,}/g); // selector runs (emoji / byte steganography)
   drop(/\udb40[\udd00-\uddef]/g); // a stray VS17–VS256
-  drop(/‍/g, (m, i) => /\p{Extended_Pictographic}/u.test(s.slice(Math.max(0, i - 2), i)) && /\p{Extended_Pictographic}/u.test(s.slice(i + 1, i + 3)));
-  drop(/‌/g, (m, i) => /[^\P{L}A-Za-zÀ-ɏ]/u.test(s[i - 1] || '') && /[^\P{L}A-Za-zÀ-ɏ]/u.test(s[i + 1] || ''));
-  drop(/[​⁠-⁤﻿᠎­‪-‮⁦-⁩]/g);
+  drop(/\u200D/g, (m, i) => (/\p{Extended_Pictographic}/u.test(s.slice(Math.max(0, i - 2), i)) && /\p{Extended_Pictographic}/u.test(s.slice(i + 1, i + 3))) || (NON_LATIN_LETTER.test(s[i - 1] || '') && NON_LATIN_LETTER.test(s[i + 1] || '')));
+  drop(/\u200C/g, (m, i) => NON_LATIN_LETTER.test(s[i - 1] || '') && NON_LATIN_LETTER.test(s[i + 1] || ''));
+  drop(/[\u200B\u2060-\u2064\uFEFF\u180E\u00AD\u202A-\u202E\u2066-\u2069\u115F\u1160\u3164\uFFA0]/g);
   let replaced = 0;
   s = s.replace(/[\p{L}\p{M}]+/gu, (w) => {
     if (!/[A-Za-z]/.test(w) || !/[Ѐ-ӿͰ-Ͽ]/.test(w)) return w;
@@ -440,6 +476,31 @@ export function stripHidden(input) {
       .join('');
   });
   return { text: s, removed, replaced };
+}
+
+/**
+ * The paste guard's verdict on pasted text: findings worth asking about (medium and up — a lone
+ * zero-width character or bidi mark goes through), short descriptions, and the cleaned text.
+ */
+export function checkPaste(text, opts = {}) {
+  text = String(text ?? '');
+  const findings = scanText(text, opts).filter((f) => SEVERITY_ORDER[f.severity] <= SEVERITY_ORDER.medium);
+  findings.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || (b.instructions ? 1 : 0) - (a.instructions ? 1 : 0));
+  const clean = stripHidden(text);
+  return {
+    show: findings.length > 0,
+    total: findings.length,
+    findings: findings.slice(0, 5).map((f) => ({
+      kind: f.kind,
+      label: KINDS[f.kind]?.label || f.kind,
+      severity: f.severity,
+      instructions: !!f.instructions,
+      text: f.payload ? `${f.note}: “${visualize(f.payload.replace(/\s+/g, ' ').trim(), 200)}”` : f.ctx ? `${f.note}: ${f.ctx.before}${f.ctx.match}${f.ctx.after}`.slice(0, 260) : f.note,
+    })),
+    cleaned: clean.text,
+    removed: clean.removed,
+    replaced: clean.replaced,
+  };
 }
 
 /** Injected: scroll to and flash the element at `selector`. */

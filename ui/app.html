@@ -162,6 +162,28 @@
         <main class="list" id="scList"></main>
       </section>
 
+      <!-- ── Inspect: characters / compare ── -->
+      <section class="view" data-view="inspect">
+        <div class="toolbar">
+          <div class="seg" id="insMode">
+            <button data-v="chars" class="on" title="Every character: code point, name, script, block — and what invisible ones hide">Characters</button>
+            <button data-v="compare" title="Two texts that look alike: what differs, and whether a reader could see it">Compare</button>
+          </div>
+          <label class="tgl" title="Hide plain printable ASCII (letters, digits, punctuation, space)"><input type="checkbox" id="insUnusual" checked /> Unusual only</label>
+          <span class="spacer"></span>
+          <span class="count" id="insCount"></span>
+        </div>
+        <div class="io" id="insCharsIo">
+          <textarea id="insIn" rows="3" spellcheck="false" placeholder="Paste text to see every character — invisible ones, look-alike letters, and what tags and selectors hide"></textarea>
+        </div>
+        <div class="io compare-io" id="insCompareIo" hidden>
+          <textarea id="insA" rows="3" spellcheck="false" placeholder="Text A — e.g. the original"></textarea>
+          <textarea id="insB" rows="3" spellcheck="false" placeholder="Text B — e.g. the copy you received"></textarea>
+        </div>
+        <div class="banner" id="insBanner" hidden></div>
+        <main class="list" id="insOut"></main>
+      </section>
+
       <!-- ── Tokenizer ── -->
       <section class="view" data-view="tokens">
         <div class="io">
@@ -221,6 +243,46 @@
           <button class="btn" id="mSave">Download .txt</button>
         </div>
         <main class="list" id="mOut"></main>
+      </section>
+
+      <!-- ── Batch export ── -->
+      <section class="view" data-view="batch">
+        <div class="io">
+          <textarea id="batIn" rows="3" spellcheck="false" placeholder="Prompts to test — one per line. Each one goes through every transform below."></textarea>
+          <div class="io-meta">
+            <label class="tgl" title="Use the whole box as a single prompt (keeps line breaks)"><input type="checkbox" id="batWhole" /> One prompt</label>
+            <span class="spacer"></span>
+            <span class="stat" id="batStat"></span>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input type="search" id="batFilter" placeholder="Filter transforms or /regex/" spellcheck="false" style="width: 170px" />
+          <select id="batCat" title="Category"><option value="">All categories</option></select>
+          <label class="tgl" title="Only transforms you starred"><input type="checkbox" id="batFav" /> Favorites</label>
+          <label class="tgl" title="Only transforms that decode back — something a model could read"><input type="checkbox" id="batRev" checked /> Reversible</label>
+          <span class="spacer"></span>
+          <span class="count" id="batTCount"></span>
+        </div>
+        <div class="toolbar">
+          <span class="muted small">Wrap</span>
+          <select id="batTpl" title="Template around each payload"></select>
+          <input type="text" id="batTplText" class="mono" spellcheck="false" style="flex: 1; min-width: 160px" title="Placeholders: {payload} · {prompt} · {transform} · {category} · {n} — \n for a line break" />
+          <label class="tgl" title="Add each prompt unchanged as a control row"><input type="checkbox" id="batOrig" /> Original</label>
+        </div>
+        <div class="toolbar">
+          <div class="seg" id="batFmt"></div>
+          <span class="count" id="batMeta"></span>
+          <span class="spacer"></span>
+          <button class="btn" id="batCopy">
+            <svg class="i" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2" /><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5" /></svg>
+            Copy
+          </button>
+          <button class="btn primary" id="batSave">
+            <svg class="i" viewBox="0 0 24 24"><path d="M12 4v11" /><path d="m7.5 10.5 4.5 4.5 4.5-4.5" /><path d="M5 20h14" /></svg>
+            Download
+          </button>
+        </div>
+        <main class="list" id="batOut"></main>
       </section>
 
       <!-- ── Tokenade ── -->

@@ -5,6 +5,7 @@ import { list, CATEGORIES, CATEGORY_ORDER, setCustomAlphabets, setRecipes } from
 import { STEG_DEFAULTS, CARRIERS, encodeEmojiBits } from '../src/core/stego.js';
 import { MODEL_SUGGESTIONS, keyInfo, listModels } from '../src/core/openrouter.js';
 import { visualize } from '../src/core/scan.js';
+import { parseSites, matchPatterns, PASTE_SITES } from '../src/core/sites.js';
 import { $, h, debounce, matcher, twoClick, download } from './lib.js';
 
 const ext = typeof chrome !== 'undefined' && chrome.runtime?.id;
@@ -96,8 +97,8 @@ $('orLoad').addEventListener('click', async () => {
 
 // ── steganography ──
 
-const VS = { '︎': 'VS15 (U+FE0E)', '️': 'VS16 (U+FE0F)' };
-const ZW = { '': 'None', '​': 'ZWSP (U+200B)', '‌': 'ZWNJ (U+200C)', '‍': 'ZWJ (U+200D)', '⁠': 'Word joiner (U+2060)' };
+const VS = { '\uFE0E': 'VS15 (U+FE0E)', '\uFE0F': 'VS16 (U+FE0F)' };
+const ZW = { '': 'None', '\u200B': 'ZWSP (U+200B)', '\u200C': 'ZWNJ (U+200C)', '\u200D': 'ZWJ (U+200D)', '\u2060': 'Word joiner (U+2060)' };
 const STEGO_FIELDS = [
   ['bitZeroVS', 'Bit 0', VS],
   ['bitOneVS', 'Bit 1', VS],
@@ -302,6 +303,7 @@ function renderAll() {
   menu();
   histCount();
   liveState();
+  pasteState();
 }
 
 // ── live scan (opt-in: needs read access to all sites) ──
@@ -311,7 +313,19 @@ const ALL_SITES = { origins: ['<all_urls>'] };
 async function liveState() {
   const granted = ext && (await chrome.permissions.contains(ALL_SITES));
   $('liveOn').checked = !!s.autoScan && granted;
+  $('liveMode').value = s.liveMode === 'only' ? 'only' : 'all';
+  if (document.activeElement !== $('liveSites')) $('liveSites').value = (s.liveSites || []).join('\n');
 }
+
+$('liveMode').addEventListener('change', () => save({ liveMode: $('liveMode').value }));
+$('liveSites').addEventListener(
+  'input',
+  debounce(() => {
+    const sites = parseSites($('liveSites').value);
+    save({ liveSites: sites });
+    $('liveSitesMsg').textContent = sites.length ? `${sites.length} site${sites.length === 1 ? '' : 's'}: ${sites.join(', ')}` : 'No sites listed.';
+  }, 400),
+);
 
 $('liveOn').addEventListener('change', async (e) => {
   const msg = $('liveMsg');
@@ -338,13 +352,85 @@ $('liveOn').addEventListener('change', async (e) => {
       /* already gone */
     }
     msg.textContent = 'Off: the permission to read all sites was given back.';
+    // the paste guard may have been relying on it
+    if (s.pasteGuard && !(await pasteGranted(s.pasteSites))) {
+      await save({ pasteGuard: false });
+      pasteState();
+      $('pasteMsg').textContent = 'The paste guard used that permission too and is off now — switch it on again to give it its own.';
+    }
   }
+});
+
+// ── paste guard (opt-in: needs permission for the listed sites) ──
+
+const pasteGranted = async (sites) => ext && (await chrome.permissions.contains({ origins: matchPatterns(sites) }));
+
+async function pasteState() {
+  $('pasteOn').checked = !!s.pasteGuard && !!(await pasteGranted(s.pasteSites));
+  if (document.activeElement !== $('pasteSites')) $('pasteSites').value = (s.pasteSites || []).join('\n');
+}
+
+/** Ask for the sites (inside the click) and switch the guard on. */
+async function enablePaste(sites) {
+  const msg = $('pasteMsg');
+  msg.textContent = '';
+  if (!sites.length) {
+    msg.textContent = 'List at least one site.';
+    return false;
+  }
+  let ok = false;
+  try {
+    ok = await chrome.permissions.request({ origins: matchPatterns(sites) }); // first await: still inside the click
+  } catch (err) {
+    msg.textContent = err.message || String(err);
+  }
+  if (!ok) {
+    msg.textContent ||= 'Permission not granted — the paste guard stays off.';
+    return false;
+  }
+  await save({ pasteGuard: true, pasteSites: sites });
+  msg.textContent = `On for ${sites.length} site${sites.length === 1 ? '' : 's'}. Open chat tabs are covered right away.`;
+  return true;
+}
+
+$('pasteOn').addEventListener('change', async (e) => {
+  if (!ext) return;
+  if (e.target.checked) {
+    e.target.checked = await enablePaste(parseSites($('pasteSites').value));
+    return;
+  }
+  await save({ pasteGuard: false });
+  // give back the site permissions unless live scan still needs read access everywhere
+  if (!s.autoScan) {
+    try {
+      await chrome.permissions.remove({ origins: matchPatterns(s.pasteSites) });
+    } catch {
+      /* already gone */
+    }
+  }
+  $('pasteMsg').textContent = 'Off.';
+});
+
+$('pasteSave').addEventListener('click', async () => {
+  const sites = parseSites($('pasteSites').value);
+  $('pasteSites').value = sites.join('\n');
+  if (s.pasteGuard && ext) {
+    if (await enablePaste(sites)) $('pasteSitesMsg').textContent = 'Saved.';
+  } else {
+    await save({ pasteSites: sites });
+    $('pasteSitesMsg').textContent = `Saved ${sites.length} site${sites.length === 1 ? '' : 's'}.`;
+  }
+});
+$('pasteReset').addEventListener('click', () => {
+  $('pasteSites').value = PASTE_SITES.join('\n');
+  $('pasteSitesMsg').textContent = 'Defaults filled in — Save sites to keep them.';
 });
 
 store.onChange((changes) => {
   for (const [k, v] of Object.entries(changes)) s[k] = v.newValue;
   if (changes.history) histCount();
-  if (changes.autoScan) liveState();
+  if (changes.autoScan || changes.liveMode || changes.liveSites) liveState();
+  if (changes.pasteGuard || changes.pasteSites) pasteState();
   if (changes.recipes) {
     setRecipes(s.recipes);
     menu();

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "injex",
   "short_name": "injex",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Prompt-injection text toolkit: 222 encoders, ciphers and Unicode tricks, a universal decoder, steganography and a hidden-text scanner.",
   "minimum_chrome_version": "116",
   "icons": {

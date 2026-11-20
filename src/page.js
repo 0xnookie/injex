@@ -32,6 +32,54 @@ export function captureSelection() {
 }
 
 /**
+ * Live scan on pages that keep changing (chats, mail, feeds): watch the DOM and ask the background for a
+ * rescan once new text has settled. Quiet for 1.5 s, at most 10 s after the first change, and never more
+ * often than every 4 s, backing off up to a minute on pages that change all the time. Stops when the
+ * background says so (live scan switched off) or the extension goes away. Returns false if already watching.
+ */
+export function watchPage() {
+  if (window.__injexWatch) return false;
+  window.__injexWatch = true;
+  const QUIET = 1500;
+  const MAX_WAIT = 10000;
+  const MAX_GAP = 60000;
+  let gap = 4000;
+  let timer = 0;
+  let firstDirty = 0;
+  let lastFire = Date.now();
+  let obs = null;
+  const stop = () => {
+    obs?.disconnect();
+    clearTimeout(timer);
+    window.__injexWatch = false;
+  };
+  const fire = () => {
+    timer = 0;
+    firstDirty = 0;
+    lastFire = Date.now();
+    gap = Math.min(MAX_GAP, gap * 1.5);
+    try {
+      chrome.runtime.sendMessage({ type: 'injex:changed' }).then((r) => r?.stop && stop(), stop);
+    } catch {
+      stop();
+    }
+  };
+  const schedule = () => {
+    const now = Date.now();
+    if (!firstDirty) firstDirty = now;
+    clearTimeout(timer);
+    const due = Math.max(Math.min(now + QUIET, firstDirty + MAX_WAIT), lastFire + gap);
+    timer = setTimeout(fire, due - now);
+  };
+  const SKIP = /^(SCRIPT|STYLE|LINK|META|NOSCRIPT|TEMPLATE)$/;
+  const relevant = (records) =>
+    records.some((r) => r.type !== 'childList' || [...r.addedNodes].some((n) => (n.nodeType === 3 ? n.nodeValue.trim() : n.nodeType === 1 ? !SKIP.test(n.nodeName) : n.nodeType === 8)));
+  obs = new MutationObserver((records) => relevant(records) && schedule());
+  obs.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['alt', 'title', 'aria-label', 'aria-description', 'placeholder', 'content'] });
+  return true;
+}
+
+/**
  * Put `result` back: replace the remembered selection when it was editable (and `replace` is set),
  * otherwise show a small panel with the result and a Copy button. Also tries to copy right away.
  * @param {{ result: string, title: string, sub?: string, replace?: boolean, error?: boolean }} msg

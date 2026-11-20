@@ -1472,6 +1472,115 @@ button.chip:hover {
   text-overflow: ellipsis;
 }
 
+/* Inspect: characters */
+.glyph {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 26px;
+  padding: 0 6px;
+  font: 15px/1 var(--mono);
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+
+.glyph.word {
+  font: 600 9.5px/1 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.glyph.bad {
+  color: var(--critical);
+  border-color: color-mix(in srgb, var(--critical) 40%, transparent);
+  background: color-mix(in srgb, var(--critical) 8%, transparent);
+}
+
+.glyph.warn {
+  color: var(--medium);
+  border-color: color-mix(in srgb, var(--medium) 40%, transparent);
+  background: color-mix(in srgb, var(--medium) 8%, transparent);
+}
+
+.row .hex {
+  flex: none;
+  font: 11px/1 var(--mono);
+  color: var(--text-2);
+}
+
+.row .idx {
+  flex: none;
+  width: 34px;
+  font: 10.5px/1 var(--mono);
+  color: var(--muted);
+  text-align: right;
+}
+
+.row.char .value {
+  margin-left: 84px;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+/* Inspect: compare */
+.compare-io {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+body.full .compare-io {
+  grid-template-columns: 1fr 1fr;
+}
+
+.compare-io textarea {
+  min-height: 64px;
+  max-height: 160px;
+}
+
+.diff {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  max-height: 280px;
+  overflow: auto;
+  font: 12px/1.7 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.diff del,
+.diff ins {
+  text-decoration: none;
+  padding: 1px 2px;
+  border-radius: 3px;
+}
+
+.diff del {
+  color: var(--critical);
+  background: color-mix(in srgb, var(--critical) 14%, transparent);
+  text-decoration: line-through;
+}
+
+.diff ins {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+}
+
+.diff .mark {
+  font-size: 10.5px;
+  opacity: 0.85;
+}
+
 /* layered decode chain */
 .chain {
   display: flex;

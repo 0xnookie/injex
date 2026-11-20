@@ -32,7 +32,7 @@ export const TOKENADE_PRESETS = {
   super: { depth: 5, breadth: 8, repeats: 18, separator: 'zwnj', vs: true, noise: true, randomize: true },
 };
 
-export const SEPARATORS = { zwnj: '‌', zwj: '‍', zwsp: '​', none: '' };
+export const SEPARATORS = { zwnj: '\u200C', zwj: '\u200D', zwsp: '\u200B', none: '' };
 export const DANGER_TOKENS = 25_000_000;
 
 /**
@@ -43,15 +43,15 @@ export function tokenade(opts = {}) {
   const depth = clamp(opts.depth, 1, 8, 3);
   const breadth = clamp(opts.breadth, 1, 10, 4);
   const repeats = clamp(opts.repeats, 1, 50, 5);
-  const sep = SEPARATORS[opts.separator] ?? '‌';
+  const sep = SEPARATORS[opts.separator] ?? '\u200C';
   const rnd = seeded(opts.seed);
   const emojis = opts.emojis?.length ? opts.emojis : ['🐍', '🐉', '🔥', '💥', '🗿', '⚓', '⭐', '✨', '🚀', '💀'];
 
   const pickEmojis = (n) => Array.from({ length: n }, (_, i) => (opts.randomize === false ? emojis[i % emojis.length] : pick(emojis, rnd)));
-  const addVS = (str) => (opts.vs ? [...str].map((c, i) => c + (i % 2 === 0 ? '️' : '︎')).join('') : str);
+  const addVS = (str) => (opts.vs ? [...str].map((c, i) => c + (i % 2 === 0 ? '\uFE0F' : '\uFE0E')).join('') : str);
   const noise = () => {
     if (!opts.noise) return '';
-    const parts = ['​', '‌', '‍', '⁠', '⁢', '⁣'];
+    const parts = ['\u200B', '\u200C', '\u200D', '\u2060', '\u2062', '\u2063'];
     let s = '';
     for (let i = 0, n = 1 + Math.floor(rnd() * 3); i < n; i++) s += pick(parts, rnd);
     return s;
@@ -66,7 +66,7 @@ export function tokenade(opts = {}) {
       for (const d of ch.codePointAt(0).toString(16)) seq += String.fromCodePoint(d <= '9' ? 0xe0030 + (d.charCodeAt(0) - 48) : 0xe0061 + (d.charCodeAt(0) - 97));
       return seq + String.fromCodePoint(0xe007f);
     };
-    let out = carrier + (opts.vs ? '️' : '');
+    let out = carrier + (opts.vs ? '\uFE0F' : '');
     for (const e of pickEmojis(units)) out += sep + tagSeq(e) + noise();
     return out;
   }
@@ -101,7 +101,7 @@ export function estimateTokenade(opts = {}) {
 /** A character repeated with combining marks / zero-width characters between. */
 export function textPayload({ base = 'A', repeat = 100, combining = true, zeroWidth = false } = {}) {
   const marks = ['́', '̀', '̂', '̃', '̈', '̇', '̄'];
-  const zw = ['​', '‌', '‍', '⁠'];
+  const zw = ['\u200B', '\u200C', '\u200D', '\u2060'];
   const n = clamp(repeat, 1, 10000, 100);
   let out = '';
   for (let i = 0; i < n; i++) out += (base || 'A') + (combining ? marks[i % marks.length] : '') + (zeroWidth ? zw[i % zw.length] : '');
@@ -139,7 +139,7 @@ export function mutate(input, { count = 20, seed = '', on = ['randomMix', 'zeroW
         /* keep s */
       }
     }
-    if (set.has('zeroWidth')) s = [...s].map((c) => (rnd() < 0.2 ? c + pick(['​', '‌', '‍', '⁠'], rnd) : c)).join('');
+    if (set.has('zeroWidth')) s = [...s].map((c) => (rnd() < 0.2 ? c + pick(['\u200B', '\u200C', '\u200D', '\u2060'], rnd) : c)).join('');
     if (set.has('unicodeNoise')) s = [...s].map((c) => (rnd() < 0.15 ? c + pick(['́', '̀', '̂', '̃', '̈', '̇', '̄'], rnd) : c)).join('');
     if (set.has('whitespace')) s = s.replace(/\s/g, (m) => (rnd() < 0.5 ? m : rnd() < 0.5 ? '\t' : ' '));
     if (set.has('casing')) s = [...s].map((c) => (/[a-z]/i.test(c) ? (rnd() < 0.5 ? c.toUpperCase() : c.toLowerCase()) : c)).join('');

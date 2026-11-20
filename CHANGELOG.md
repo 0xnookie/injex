@@ -5,6 +5,41 @@ All notable changes to **injex** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-11-20
+
+### Added
+- **Command line and GitHub Action.** `cli/injex.mjs` (Node 20+, no dependencies; `npx github:0xnookie/injex`)
+  runs the extension's own modules: `scan` finds hidden text in files with line and column (Unicode tags,
+  emoji steganography, zero-width runs, bidi controls, invisible letters, homoglyphs, and HTML / Markdown
+  comments that read like instructions to a model) — git-aware, `.injexignore` / `--exclude`, binary and
+  size skipping, UTF-16 — and reports as text, JSON, SARIF or GitHub annotations with a job summary,
+  failing at `--fail-on` (default `high`). `clean --check / --write` fixes files (BOM and UTF-16 kept),
+  plus `decode`, `encode` (chains, `-d`), `list`, `inspect` and `diff`. `action.yml` wraps it as a
+  composite GitHub Action (outputs `findings`, `failing`; optional SARIF for code scanning); CI runs it on
+  this repository.
+- **Inspect tab.** *Characters*: every code point with glyph, Unicode 17 name, category, script, block,
+  flags (invisible, bidi, tag, selector, look-alike, odd space, private use …) and escapes; runs of tags or
+  selectors collapse into one row with what they hide; *Copy cleaned*, *Copy NFKC*. *Compare*: a
+  code-point diff of two texts with a verdict (identical / normalization / looks the same but isn't /
+  visibly different) and every difference named. Right-click → *Inspect characters*. Data generated from
+  the UCD by `tools/build-unicode-data.mjs` and loaded only when used.
+- **Batch tab.** Prompts × filtered transforms, optional template (`{payload}`, `{prompt}`, `{transform}`,
+  `{category}`, `{n}`) and control rows, exported as JSONL, CSV, JSON, a promptfoo tests file or text.
+- **Paste guard (opt-in).** On the AI chat sites you list (defaults: ChatGPT, Claude, Gemini, AI Studio,
+  Copilot, Perplexity, DeepSeek, Grok, Le Chat, Poe, Meta AI, Hugging Face), a paste that hides text is
+  held and a panel offers *Paste cleaned* (Enter), *Paste as is* or *Cancel* (Esc). Clean pastes are not
+  touched. Asks for permission for those sites only.
+- **Live scan follows changing pages** — chats, mail, feeds are scanned again once new text settles
+  (rate-limited, backing off on busy pages) — and takes a site list: every site except some, or only some.
+  The popup's Scan tab can add or remove the current site.
+- Scanner: **invisible letters** (Hangul fillers used as blank identifiers in code) as a new check.
+
+### Changed
+- The scanner and the cleaner leave alone what is normal text: flag emoji built from tag characters
+  (England, Scotland, Wales) and ZWJ / ZWNJ between letters of Persian, Arabic and Indic scripts. Tags
+  appended to a flag are still reported.
+- injex's own sources no longer contain literal invisible characters (escaped as `\uXXXX`).
+
 ## [1.1.0] — 2026-11-20
 
 ### Added
@@ -72,5 +107,6 @@ dashboard and a right-click menu.
   context-menu transform picker, history, keyboard shortcuts, backup / restore.
 - Node test suite (`node test/run-tests.mjs`) and CI.
 
+[1.2.0]: https://github.com/0xnookie/injex/releases/tag/v1.2.0
 [1.1.0]: https://github.com/0xnookie/injex/releases/tag/v1.1.0
 [1.0.0]: https://github.com/0xnookie/injex/releases/tag/v1.0.0

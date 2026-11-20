@@ -1,0 +1,59 @@
+name: injex hidden-text scan
+description: Fail the build when files hide text from reviewers — Unicode tags, emoji steganography, zero-width, bidi and blank characters, look-alike letters, instruction-like hidden comments.
+author: 0xnookie
+branding:
+  icon: eye-off
+  color: gray-dark
+
+inputs:
+  path:
+    description: Files or folders to scan, separated by spaces or new lines. Folders in a git repository use the files git tracks.
+    required: false
+    default: .
+  fail-on:
+    description: Fail when a finding is at least this severe — critical, high, medium, low or none.
+    required: false
+    default: high
+  min-severity:
+    description: Only report findings at least this severe.
+    required: false
+    default: low
+  exclude:
+    description: Glob patterns to skip, one per line (in addition to .injexignore).
+    required: false
+    default: ''
+  sarif:
+    description: Also write a SARIF report to this path, for github/codeql-action/upload-sarif.
+    required: false
+    default: ''
+
+outputs:
+  findings:
+    description: Number of findings reported.
+    value: ${{ steps.scan.outputs.findings }}
+  failing:
+    description: Number of findings at or above fail-on.
+    value: ${{ steps.scan.outputs.failing }}
+
+runs:
+  using: composite
+  steps:
+    - id: scan
+      shell: bash
+      # inputs go through the environment, never into the script text
+      env:
+        INJEX_PATHS: ${{ inputs.path }}
+        INJEX_FAIL_ON: ${{ inputs.fail-on }}
+        INJEX_MIN_SEVERITY: ${{ inputs.min-severity }}
+        INJEX_EXCLUDE: ${{ inputs.exclude }}
+        INJEX_SARIF: ${{ inputs.sarif }}
+      run: |
+        set -f
+        args=(scan --format github --fail-on "$INJEX_FAIL_ON" --min-severity "$INJEX_MIN_SEVERITY")
+        if [ -n "$INJEX_SARIF" ]; then args+=(--sarif "$INJEX_SARIF"); fi
+        while IFS= read -r glob; do
+          if [ -n "$glob" ]; then args+=(--exclude "$glob"); fi
+        done <<< "$INJEX_EXCLUDE"
+        args+=(--)
+        for p in $INJEX_PATHS; do args+=("$p"); done
+        node "$GITHUB_ACTION_PATH/cli/injex.mjs" "${args[@]}"

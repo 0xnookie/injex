@@ -21,9 +21,18 @@ jobs:
       - name: Syntax-check all sources (as ES modules)
         run: |
           set -e
-          for f in src/*.js src/core/*.js src/data/*.js ui/*.js ui/views/*.js tools/*.mjs test/*.mjs; do
+          for f in src/*.js src/core/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs; do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
+
+      - name: Content script is a classic script (no import / export)
+        run: node -e "new (require('vm').Script)(require('fs').readFileSync('src/content/paste-guard.js', 'utf8'), { filename: 'paste-guard.js' }); console.log('paste-guard.js OK')"
+
+      # injex scanning itself, through the action in this repository (action.yml)
+      - name: No hidden text in the repository
+        uses: ./
+        with:
+          fail-on: high
 
       - name: Transform index is in sync with src/transforms
         run: |
