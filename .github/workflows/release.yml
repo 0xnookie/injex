@@ -34,6 +34,13 @@ jobs:
             echo "::error::tag v$TAG does not match manifest version $MANIFEST"
             exit 1
           fi
+          SERVER="$(node -p "const s = require('./server.json'); [s.version, ...s.packages.filter((p) => p.version).map((p) => p.version)].join(' ')")"
+          for V in $SERVER; do
+            if [ "$V" != "$PKG" ]; then
+              echo "::error::server.json version $V does not match package.json $PKG (run node tools/build-mcpb.mjs --server-json)"
+              exit 1
+            fi
+          done
 
       - name: Package extension
         run: |
@@ -54,10 +61,113 @@ jobs:
           echo "FFZIP=$FFZIP" >> "$GITHUB_ENV"
           unzip -l "$FFZIP" | tail -3
 
+      # the MCP server as an MCP Bundle for Claude Desktop and other MCPB hosts: see tools/build-mcpb.mjs
+      - name: Package MCP bundle
+        run: |
+          node tools/build-mcpb.mjs
+          echo "MCPB=dist/injex-mcp-${GITHUB_REF_NAME#v}.mcpb" >> "$GITHUB_ENV"
+
+      # VS Code / Open VSX extension (vscode/): see tools/build-vscode.mjs; publishing to the marketplaces
+      # needs their tokens and is left to `vsce publish` / `ovsx publish` with this file
+      - name: Package VS Code extension
+        run: |
+          node tools/build-vscode.mjs
+          echo "VSIX=dist/injex-vscode-${GITHUB_REF_NAME#v}.vsix" >> "$GITHUB_ENV"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ZIP" "$FFZIP" \
+          gh release create "$GITHUB_REF_NAME" "$ZIP" "$FFZIP" "$MCPB" "$VSIX" \
             --title "injex $GITHUB_REF_NAME" \
             --generate-notes
+
+  # container image on GitHub Container Registry (ghcr.io/0xnookie/injex:<version> and :latest), for the
+  # Docker MCP Catalog and CI systems without Node. Set the repository variable GHCR_PUBLISH=true to turn it on.
+  docker:
+    needs: release
+    if: vars.GHCR_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/0xnookie/injex:${{ steps.v.outputs.version }}
+            ghcr.io/0xnookie/injex:latest
+
+  # npm: the first publish of @0xnookie/injex is manual (npm publish with 2FA); after that, add this
+  # repository as a trusted publisher on npmjs.com and set the repository variable NPM_PUBLISH=true.
+  # No token is stored: npm accepts the workflow's OIDC identity and adds a provenance statement.
+  npm:
+    needs: release
+    if: vars.NPM_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: npm with trusted publishing (11.5.1 or later)
+        run: npm install -g npm@11
+
+      - name: Publish
+        run: npm publish --access public
+
+  # the official MCP Registry (server.json): namespace io.github.0xnookie, proven by the workflow's OIDC
+  # identity. Set the repository variable MCP_REGISTRY_PUBLISH=true to turn it on.
+  mcp-registry:
+    needs: [release, npm]
+    if: vars.MCP_REGISTRY_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: server.json for the bundle attached to this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" --pattern '*.mcpb' --dir release-assets
+          node tools/build-mcpb.mjs --server-json --sha-of "release-assets/injex-mcp-${GITHUB_REF_NAME#v}.mcpb"
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+
+      - name: Publish to the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

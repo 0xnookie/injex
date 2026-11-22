@@ -127,6 +127,57 @@ export function decodeTags(text) {
   return dec.decode(new Uint8Array(bytes.filter((b) => b !== 0x7f && b !== 0x01)));
 }
 
+// ── invisible bits ("Sneaky Bits"): each UTF-8 bit as one of two invisible characters ──
+
+export const SNEAKY_DEFAULTS = { zero: '\u2062', one: '\u2064' }; // INVISIBLE TIMES = 0, INVISIBLE PLUS = 1
+
+/** Text → one invisible character per bit (MSB first): U+2062 for 0, U+2064 for 1 by default. */
+export function encodeSneakyBits(text, options = {}) {
+  const o = { ...SNEAKY_DEFAULTS, ...options };
+  return Array.from(enc.encode(text || ''), (b) => [...b.toString(2).padStart(8, '0')].map((bit) => (bit === '0' ? o.zero : o.one)).join('')).join('');
+}
+
+function bitsToText(bits) {
+  const bytes = [];
+  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
+  return dec.decode(new Uint8Array(bytes));
+}
+
+/** Recover text hidden by encodeSneakyBits (the longest run of the two characters). */
+export function decodeSneakyBits(text, options = {}) {
+  const o = { ...SNEAKY_DEFAULTS, ...options };
+  if (!text) return '';
+  const esc = (c) => '\\u{' + c.codePointAt(0).toString(16) + '}';
+  const runs = text.match(new RegExp(`[${esc(o.zero)}${esc(o.one)}]{8,}`, 'gu')) || [];
+  let best = '';
+  for (const r of runs) if (r.length > best.length) best = r;
+  if (!best) return '';
+  return bitsToText([...best].map((c) => (c === o.zero ? '0' : '1')).join(''));
+}
+
+// characters that render as nothing and can serve as a 0 / 1 pair
+const INVISIBLE_BIT_CHARS = '\u200B\u200C\u200D\u2060\u2061\u2062\u2063\u2064\uFEFF\u180E\u034F';
+
+/**
+ * A run made of exactly two invisible characters, read as bits (either assignment). Covers Sneaky Bits
+ * and other two-symbol zero-width encodings. Returns { text, zero, one } or null.
+ */
+export function decodeInvisibleBinary(run) {
+  const chars = [...(run || '')];
+  if (chars.length < 16 || chars.length % 8 !== 0) return null;
+  const set = [...new Set(chars)];
+  if (set.length !== 2 || !set.every((c) => INVISIBLE_BIT_CHARS.includes(c))) return null;
+  const known = set.includes(SNEAKY_DEFAULTS.zero) && set.includes(SNEAKY_DEFAULTS.one);
+  const orders = known ? [[SNEAKY_DEFAULTS.zero, SNEAKY_DEFAULTS.one]] : [set, [set[1], set[0]]];
+  let best = null;
+  for (const [zero, one] of orders) {
+    const s = bitsToText(chars.map((c) => (c === zero ? '0' : '1')).join(''));
+    const r = printableRatio(s);
+    if (r > 0.9 && s.trim().length >= 2 && (!best || r > best.r)) best = { text: s, zero, one, r };
+  }
+  return best && { text: best.text, zero: best.zero, one: best.one };
+}
+
 export function printableRatio(s) {
   if (!s) return 0;
   const chars = [...s];
@@ -143,5 +194,7 @@ export function revealAll(text, options = {}) {
   add('Unicode tags', decodeTags(text));
   add('Emoji steganography (VS bits)', decodeEmojiBits(text, options));
   add('Emoji steganography (VS bytes)', decodeEmojiBytes(text));
+  add('Invisible bits (Sneaky Bits)', decodeSneakyBits(text));
+  for (const run of text.match(/[\u200B-\u200D\u2060-\u2064\uFEFF\u180E\u034F]{16,}/g) || []) add('Invisible bits', decodeInvisibleBinary(run)?.text);
   return out;
 }

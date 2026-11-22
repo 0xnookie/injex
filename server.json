@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.0xnookie/injex",
+  "title": "injex",
+  "description": "Find, remove and decode hidden text and prompt injection in text, files, PDFs, Office docs and URLs",
+  "repository": {
+    "url": "https://github.com/0xnookie/injex",
+    "source": "github"
+  },
+  "version": "1.4.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@0xnookie/injex",
+      "version": "1.4.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/0xnookie/injex/releases/download/v1.4.0/injex-mcp-1.4.0.mcpb",
+      "fileSha256": "a089cf7ceef6259759adc6a1588d211fbc709e5b2f383abd14abb0535ab80c11",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

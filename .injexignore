@@ -1,3 +1,5 @@
 # Paths `injex scan` skips in this repository (one glob per line, like .gitignore).
 # The bundled tokenizer vocabularies contain zero-width and bidi characters because real tokens do.
 vendor/gpt-tokenizer/
+# fixtures that reproduce attacks on purpose (agent-config audit, hidden-text corpus)
+test/fixtures/

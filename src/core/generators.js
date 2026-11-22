@@ -133,10 +133,15 @@ export function mutate(input, { count = 20, seed = '', on = ['randomMix', 'zeroW
   for (let i = 0; i < n; i++) {
     let s = src;
     if (set.has('randomMix') && transforms.randomizer) {
+      // the randomizer draws from Math.random: give it the seeded generator so a seed reproduces the mix
+      const orig = Math.random;
+      if (rnd !== orig) Math.random = rnd;
       try {
         s = transforms.randomizer.func(s, { minTransforms: 2, maxTransforms: 4 });
       } catch {
         /* keep s */
+      } finally {
+        Math.random = orig;
       }
     }
     if (set.has('zeroWidth')) s = [...s].map((c) => (rnd() < 0.2 ? c + pick(['\u200B', '\u200C', '\u200D', '\u2060'], rnd) : c)).join('');
@@ -144,10 +149,14 @@ export function mutate(input, { count = 20, seed = '', on = ['randomMix', 'zeroW
     if (set.has('whitespace')) s = s.replace(/\s/g, (m) => (rnd() < 0.5 ? m : rnd() < 0.5 ? '\t' : ' '));
     if (set.has('casing')) s = [...s].map((c) => (/[a-z]/i.test(c) ? (rnd() < 0.5 ? c.toUpperCase() : c.toLowerCase()) : c)).join('');
     if (set.has('zalgo') && transforms.zalgo) {
+      const orig = Math.random;
+      if (rnd !== orig) Math.random = rnd;
       try {
         s = transforms.zalgo.func(s);
       } catch {
         /* keep s */
+      } finally {
+        Math.random = orig;
       }
     }
     if (set.has('homoglyphs')) s = [...s].map((c) => (HOMO[c] && rnd() < 0.25 ? HOMO[c] : c)).join('');

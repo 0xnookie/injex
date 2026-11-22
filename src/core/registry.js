@@ -40,6 +40,7 @@ export const CATEGORIES = {
   format: { label: 'Format', short: 'FORMAT', desc: 'Text formatting: reverse, shuffle, wrap, strip, deduplicate …' },
   signwriting: { label: 'SignWriting', short: 'SIGN', desc: 'Sign-language fingerspelling and lip-reading notation' },
   special: { label: 'Special', short: 'MIX', desc: 'Random Mix: chains random transforms per word' },
+  defense: { label: 'Defense', short: 'DEFENSE', desc: 'Spotlighting: mark untrusted text so a model can tell it from instructions (delimit, datamark, encode)' },
   custom: { label: 'Custom', short: 'CUSTOM', desc: 'Your own spelling alphabets (Alphabets tab)' },
   recipe: { label: 'Recipes', short: 'RECIPE', desc: 'Your saved chains of transforms (Transform tab → Recipe)' },
 };

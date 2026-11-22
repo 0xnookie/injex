@@ -21,7 +21,7 @@ jobs:
       - name: Syntax-check all sources (as ES modules)
         run: |
           set -e
-          for f in src/*.js src/core/*.js src/core/docs/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs; do
+          for f in src/*.js src/core/*.js src/core/docs/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs bench/*.mjs contrib/promptfoo/*.mjs vscode/*.js; do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
 
@@ -34,6 +34,9 @@ jobs:
         uses: ./
         with:
           fail-on: high
+
+      - name: Scanner benchmark (recall on the lab corpus, false positives on benign text)
+        run: node bench/run.mjs --check
 
       - name: Transform index is in sync with src/transforms
         run: |
@@ -61,3 +64,24 @@ jobs:
             if (!m.browser_specific_settings?.gecko?.id) throw new Error('missing gecko id');
             console.log('Firefox manifest OK, min ' + m.browser_specific_settings.gecko.strict_min_version);
           "
+
+      - name: Docker image builds and runs (CLI and MCP server)
+        run: |
+          docker build -t injex-ci .
+          docker run --rm injex-ci --version
+          printf 'a\xe2\x80\x8bb' | docker run --rm -i injex-ci clean --check && exit 1 || echo "clean --check flags the zero-width space"
+          docker run --rm -v "$PWD/test/fixtures:/work:ro" injex-ci scan --quiet --fail-on none
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            | docker run --rm -i injex-ci mcp | grep -q '"serverInfo"' && echo "MCP server in the image answers"
+
+      - name: VS Code extension packs (.vsix)
+        run: |
+          node tools/build-vscode.mjs
+          unzip -l dist/injex-vscode-*.vsix | tail -1
+
+      - name: MCP bundle builds and its server starts on its own
+        run: |
+          node tools/build-mcpb.mjs
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            | (cd "$RUNNER_TEMP" && node "$GITHUB_WORKSPACE/dist/mcpb/server/cli/injex.mjs" mcp --root '${user_config.root}') \
+            | node -e "let s = ''; process.stdin.on('data', (d) => (s += d)).on('end', () => { const r = s.trim().split('\n').map(JSON.parse); const n = r[1].result.tools.length; if (!r[0].result.serverInfo || n < 10) throw new Error('bundled server did not answer'); console.log('bundled MCP server OK, ' + n + ' tools'); })"

@@ -19,6 +19,7 @@ export const TABS = [
   { id: 'split', label: 'Splitter', module: './views/split.js' },
   { id: 'mutate', label: 'Mutation Lab', module: './views/mutate.js' },
   { id: 'batch', label: 'Batch', module: './views/batch.js' },
+  { id: 'results', label: 'Results', module: './views/results.js' },
   { id: 'tokenade', label: 'Tokenade', module: './views/tokenade.js' },
   { id: 'bijection', label: 'Bijection', module: './views/bijection.js' },
   { id: 'gibberish', label: 'Gibberish', module: './views/gibberish.js' },

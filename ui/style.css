@@ -1679,6 +1679,18 @@ body.full .compare-io {
   outline-offset: -1px;
 }
 
+/* the model only sees "unknown" here, whatever the text was */
+.tok.unk {
+  background: color-mix(in srgb, var(--critical) 38%, transparent) !important;
+  outline: 1px solid var(--critical);
+  outline-offset: -1px;
+}
+
+.tok.special {
+  outline: 1px solid var(--purple);
+  outline-offset: -1px;
+}
+
 .ids {
   font: 11.5px/1.7 var(--mono);
   color: var(--text-2);
@@ -2071,4 +2083,14 @@ body.options .card > p {
   .opt-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Results view: the stats strip sits between the drop zone and the list */
+#rsStats {
+  flex: none;
+  padding: 10px 12px 0;
+}
+
+#rsStats:empty {
+  display: none;
 }

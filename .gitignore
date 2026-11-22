@@ -12,3 +12,8 @@ desktop.ini
 *.log
 node_modules/
 dist/
+__pycache__/
+*.pyc
+
+# test fixtures for the agent-configuration audit (deliberately unsafe editor settings)
+!test/fixtures/agent-config/.vscode/

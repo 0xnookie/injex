@@ -1,0 +1,44 @@
+name: Demo page
+
+# The browser demo (site/index.html) on GitHub Pages, running injex's scanner from src/core. Turn it on with
+# Settings → Pages → Source: GitHub Actions, and the repository variable PAGES_DEPLOY=true.
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'src/core/**', 'src/data/**', 'src/transforms/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: vars.PAGES_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Assemble the site (page + the core modules it imports)
+        run: |
+          mkdir -p _site/src
+          cp site/index.html _site/
+          cp -r src/core src/data src/transforms _site/src/
+          cp LICENSE _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

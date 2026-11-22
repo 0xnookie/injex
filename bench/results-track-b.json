@@ -1,0 +1,60 @@
+{
+  "track": "B",
+  "datasets": [
+    {
+      "dataset": "deepset",
+      "rows": 300,
+      "positives": 54,
+      "flaggedPositives": 17,
+      "flaggedNegatives": 0
+    },
+    {
+      "dataset": "gandalf",
+      "rows": 300,
+      "positives": 300,
+      "flaggedPositives": 177,
+      "flaggedNegatives": 0
+    },
+    {
+      "dataset": "notinject",
+      "rows": 113,
+      "positives": 0,
+      "flaggedPositives": 0,
+      "flaggedNegatives": 0
+    },
+    {
+      "dataset": "jailbreak-classification",
+      "rows": 300,
+      "positives": 137,
+      "flaggedPositives": 78,
+      "flaggedNegatives": 8
+    }
+  ],
+  "recallAtFpr": [
+    {
+      "fpr": 0.001,
+      "threshold": 0.65,
+      "tpr": 0.096,
+      "measured_fpr": 0,
+      "positives": 491,
+      "negatives": 522
+    },
+    {
+      "fpr": 0.01,
+      "threshold": 0.5,
+      "tpr": 0.468,
+      "measured_fpr": 0.0096,
+      "positives": 491,
+      "negatives": 522
+    },
+    {
+      "fpr": 0.05,
+      "threshold": 0.3,
+      "tpr": 0.554,
+      "measured_fpr": 0.0153,
+      "positives": 491,
+      "negatives": 522
+    }
+  ],
+  "note": "datasets-server serves the current revision of each dataset; numbers can shift when a dataset is updated"
+}

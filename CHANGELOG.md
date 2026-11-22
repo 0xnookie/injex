@@ -5,6 +5,97 @@ All notable changes to **injex** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-11-22
+
+### Added
+- **Scanner overhaul.** A scored, multilingual instruction heuristic that also reads leetspeak, zalgo,
+  percent-encoding and look-alike letters (Unicode confusables data, skeletons, whole-script and mixed-script
+  words, UTS #55 bidi checks); exfiltration shapes (image and link URLs that carry data, template
+  placeholders, DNS / curl commands with secrets, memory writes); encoded payloads (Base64, Base32, hex,
+  binary, percent-encoding) decoded and re-checked; the Sneaky Bits invisible-bit scheme as a transform and
+  a finding. The page scanner also reads attributes, meta, JSON-LD, title, noscript, template, shadow DOM,
+  low-contrast and covered text; HTML, SVG and Markdown files get the same checks statically, and Jupyter
+  notebooks are read cell by cell. Agent instruction files (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`,
+  `copilot-instructions.md`, skills …) are judged harder.
+- **Agent-configuration audit** (`injex audit`, on by default in `injex scan`, the action and pre-commit):
+  auto-approve settings, project hooks, folder-open tasks, MCP servers launched from unpinned packages or
+  over plain HTTP, API base-URL overrides, lifecycle scripts and AI steps in CI workflows — each mapped to
+  the CVE it reproduces. `injex event` and the action's `scan-event` input check issue, pull-request and
+  comment text before an AI agent in CI reads it, with an `event-gate` output.
+- **MCP supply chain.** `injex mcp-audit` audits configured MCP servers and their tool definitions
+  (`--connect` asks the servers; `--lock` / `--check` pin them); `injex mcp-proxy` runs a server behind
+  injex, auditing tool lists, removing hidden text from definitions and results and inspecting sampling
+  requests. The MCP server grows to 14 tools (`check_output`, `check_canary`, `wrap_untrusted`,
+  `scan_tool_manifest`, `scan_agent_config`, `scan_url`).
+- **Research workflow.** `injex batch` (prompts × transforms × spotlighting defences as JSONL, CSV, JSON,
+  promptfoo, Inspect, garak or PyRIT seed files in the `injex.row/1` schema), `injex import` (benchmark
+  datasets and PyRIT seed datasets as seeds, Hugging Face only with `--fetch`), `injex jsonl` and
+  `contrib/python` (a bridge with garak, PyRIT, Spikee, DeepTeam, AgentDojo and StrongREJECT adapters, and
+  `Injex.score()`), `contrib/promptfoo`, and `injex canary` (make, find and listen for canary tokens).
+  Findings and rows carry taxonomy tags (OWASP LLM Top 10 and Agentic, MITRE ATLAS, CWE).
+- **`injex run`** sends rows to a target and scores the answers. Targets: OpenAI-compatible chat
+  (OpenRouter, OpenAI, Ollama, LM Studio, vLLM), the Anthropic Messages API, the OpenAI Responses API, any
+  HTTP endpoint (`--body` template, `--response-path`, `--header` values that read `${VAR}` from the
+  environment) and a local command (your agent as a program, JSON on stdin), with retries on 429 / 5xx and
+  token use and cost per trial. Rows may carry their own `system` and `canary`, a prior conversation
+  (`messages`), scripted `turns`, `attachments` (PDF and images as files; Word, Excel, e-mail … as the
+  text an extractor gets, hidden runs included) and `tools` / `forbidden_tools`. Scoring is deterministic
+  — canary (also encoded, also in tool-call arguments), regex, decode-match outside refusal sentences (so
+  refusing and then complying counts, and quoting the request while refusing doesn't), exfiltration
+  shapes, forbidden tool calls — with an outcome class per answer (full, refuse_then_comply, partial,
+  refusal, evasion). An optional model judge (the built-in prompt-injection question or your own
+  `--judge-prompt`) is recorded with its prompt hash and never decides success unless asked. Repeats get
+  Wilson intervals, a row-level cluster bootstrap and hit@k; also best-of-n search and a classifier mode at
+  a fixed false-positive rate. Results are JSON lines — an `injex.run/1` header per invocation, then
+  `injex.result/2` per trial — and `--resume` skips trials already answered for the same model, row and
+  input.
+- **Working with results**: `injex report` (Markdown), `injex results` (merge, filter, group; CSV, JUnit,
+  SARIF, JSONL, Markdown; `--fail-on-asr` as a CI gate), `injex review` (label answers by hand into
+  `injex.label/1`; labels override automatic scores) and `injex judge-eval` (precision, recall, F1 and
+  Cohen's κ of every automatic signal against the labels; Krippendorff's α between raters). The extension's
+  new **Results** tab opens results files, shows every answer and its scores, and saves labels.
+- **Indirect-injection lab.** `injex lab` writes carriers hiding a benign canary instruction across web,
+  Markdown, agent files, e-mail, calendar, MCP manifests, tool output, PDF and Word, with a manifest and a
+  self-check, and rows for `injex run` (documents attached as files); `--collector` adds carriers that ask
+  for an image whose URL carries the canary. `injex lab serve` serves the corpus on this machine and logs
+  every request, flagging canaries; `injex lab mcp` is a mock MCP server whose tool carries the lab's
+  poisoned definition and result; `injex mcp-proxy --mode inject` adds a test payload to a real server's
+  tool results.
+- `injex <command> --help` shows that command's options.
+- **Spotlighting defences**: delimiting, datamarking and encoding transforms (226 transforms in all), and an
+  MCP `wrap_untrusted` tool.
+- **More documents**: Excel, PowerPoint, OpenDocument, RTF, e-mail (.eml / .mbox, with HTML parts, plain-only
+  alternatives and quoted-printable), calendar invitations (.ics) and image metadata (PNG, JPEG, WebP, GIF).
+- **Agent view** (Scan tab): what an AI browsing agent reads on the page that a screenshot doesn't show,
+  and the reverse, plus link text that disagrees with its target; an optional full accessibility tree
+  through the debugger API (Chrome). `injex url` and the MCP `scan_url` tool check a link's parameters and
+  fragment.
+- **Bring your own tokenizer.** The Tokenizer tab and `injex tokens` read any Hugging Face `tokenizer.json`
+  (BPE — byte-level or with byte fallback —, Unigram with SentencePiece charsmaps, WordPiece, WordLevel)
+  with the IDs of Hugging Face's own library, and say what the tokenizer's normalizer removes and which
+  characters become unknown tokens. The file stays on the device (IndexedDB). GPT encodings now show a
+  character's byte pieces as `<0xF3>` instead of an empty token.
+- **Benchmarks** (`bench/`, `BENCHMARKS.md`): recall on the lab corpus, false positives on benign
+  multilingual text (gated in CI), the instruction heuristic on labelled datasets, robustness against the
+  encodings red-team frameworks ship, and what tokenizers see of hidden text.
+- **VS Code / Open VSX extension** (`vscode/`): diagnostics as you type, hidden text decoded inline and on
+  hover, a "remove hidden characters" quick fix, a workspace scan including documents, and the agent
+  audit. Packed with `node tools/build-vscode.mjs`.
+- **Distribution**: an MCP Bundle (`.mcpb`) for Claude Desktop and other MCPB hosts, `server.json` for the
+  MCP Registry, a Dockerfile (CLI and MCP server), a browser demo page (`site/`), store listing notes
+  (`store/`), and release jobs for npm (trusted publishing with provenance), the MCP Registry, GHCR and
+  GitHub Pages — each switched on with a repository variable.
+
+### Changed
+- The npm package is `@0xnookie/injex` (with `mcpName` for the MCP Registry) and includes the GPT
+  encodings, so `injex tokens` works from npm.
+- `injex mcp` ignores an empty or unexpanded `--root`, as MCPB hosts pass when no folder was chosen.
+
+### Fixed
+- Mutation Lab: Random Mix and Zalgo ignored the seed, so a seeded set was not reproducible.
+- The MCP `encode` tool said 222 transforms; it now reports the live count.
+- An expandable row inside another row's details could not be opened.
+
 ## [1.3.0] — 2026-11-20
 
 ### Added

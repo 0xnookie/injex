@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "injex",
   "short_name": "injex",
-  "version": "1.3.0",
-  "description": "Prompt-injection text toolkit: 222 encoders, ciphers and Unicode tricks, a universal decoder, steganography and a hidden-text scanner.",
+  "version": "1.4.0",
+  "description": "Prompt-injection text toolkit: 226 encoders, ciphers and Unicode tricks, a universal decoder, steganography and a hidden-text scanner.",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/icon16.png",
@@ -50,5 +50,8 @@
     "scan-page": {
       "description": "Scan the page for hidden text"
     }
-  }
+  },
+  "optional_permissions": [
+    "debugger"
+  ]
 }

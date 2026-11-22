@@ -1,5 +1,5 @@
 name: injex hidden-text scan
-description: Fail the build when code, docs, PDFs or Word files hide text from reviewers — invisible Unicode, look-alikes, hidden comments, white or tiny text.
+description: Fail the build on hidden prompt injection — invisible Unicode, look-alikes, hidden comments and white text in code, docs, PDFs and Word files — and on risky AI-agent configuration.
 author: 0xnookie
 branding:
   icon: eye-off
@@ -26,6 +26,22 @@ inputs:
     description: Also write a SARIF report to this path, for github/codeql-action/upload-sarif.
     required: false
     default: ''
+  audit:
+    description: Also audit AI-agent configuration (auto-approve settings, hooks, MCP servers, folder-open tasks, AI workflows) — true or false.
+    required: false
+    default: 'true'
+  scan-files:
+    description: Scan the files in path (set to false to only scan the event).
+    required: false
+    default: 'true'
+  scan-event:
+    description: Scan the issue, pull request or comment text of the triggering event for hidden or instruction-like text — run this before an AI agent step and gate it on the event-gate output.
+    required: false
+    default: 'false'
+  event-fail-on:
+    description: Fail the event scan when a finding is at least this severe.
+    required: false
+    default: high
 
 outputs:
   findings:
@@ -34,11 +50,26 @@ outputs:
   failing:
     description: Number of findings at or above fail-on.
     value: ${{ steps.scan.outputs.failing }}
+  event-findings:
+    description: Number of findings in the event text (with scan-event).
+    value: ${{ steps.event.outputs.event-findings }}
+  event-gate:
+    description: pass or fail — whether the event text is safe to hand to an AI agent (with scan-event).
+    value: ${{ steps.event.outputs.event-gate }}
 
 runs:
   using: composite
   steps:
+    - id: event
+      if: inputs.scan-event == 'true'
+      shell: bash
+      env:
+        INJEX_EVENT_FAIL_ON: ${{ inputs.event-fail-on }}
+      run: |
+        node "$GITHUB_ACTION_PATH/cli/injex.mjs" event --format github --fail-on "$INJEX_EVENT_FAIL_ON" "$GITHUB_EVENT_PATH"
+
     - id: scan
+      if: inputs.scan-files == 'true'
       shell: bash
       # inputs go through the environment, never into the script text
       env:
@@ -47,10 +78,12 @@ runs:
         INJEX_MIN_SEVERITY: ${{ inputs.min-severity }}
         INJEX_EXCLUDE: ${{ inputs.exclude }}
         INJEX_SARIF: ${{ inputs.sarif }}
+        INJEX_AUDIT: ${{ inputs.audit }}
       run: |
         set -f
         args=(scan --format github --fail-on "$INJEX_FAIL_ON" --min-severity "$INJEX_MIN_SEVERITY")
         if [ -n "$INJEX_SARIF" ]; then args+=(--sarif "$INJEX_SARIF"); fi
+        if [ "$INJEX_AUDIT" = "false" ]; then args+=(--no-audit); fi
         while IFS= read -r glob; do
           if [ -n "$glob" ]; then args+=(--exclude "$glob"); fi
         done <<< "$INJEX_EXCLUDE"

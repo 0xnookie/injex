@@ -233,7 +233,10 @@ export function row({ head = [], value, valueClass = '', cls = '', detail, title
   if (detail) {
     let box = null;
     el.addEventListener('click', (e) => {
-      if (e.target.closest('button, a, input, select, textarea, label, .detail')) return;
+      if (e.target.closest('button, a, input, select, textarea, label')) return;
+      // clicks in this row's own detail don't toggle it (a row nested in another row's detail still opens)
+      const d = e.target.closest('.detail');
+      if (d && el.contains(d)) return;
       if (el.classList.toggle('open')) {
         box = h('div', { class: 'detail' });
         detail(box, el);

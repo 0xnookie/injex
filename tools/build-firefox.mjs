@@ -22,6 +22,11 @@ export function firefoxManifest(m) {
   const f = structuredClone(m);
   f.background = { scripts: [m.background.service_worker], type: m.background.type || 'module' };
   delete f.minimum_chrome_version;
+  // Firefox has no chrome.debugger (the Agent view's full accessibility tree is Chrome-only)
+  if (f.optional_permissions) {
+    f.optional_permissions = f.optional_permissions.filter((p) => p !== 'debugger');
+    if (!f.optional_permissions.length) delete f.optional_permissions;
+  }
   if (f.options_page) {
     f.options_ui = { page: f.options_page, open_in_tab: true };
     delete f.options_page;

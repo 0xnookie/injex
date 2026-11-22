@@ -1,6 +1,7 @@
 {
-  "name": "injex",
-  "version": "1.3.0",
+  "name": "@0xnookie/injex",
+  "mcpName": "io.github.0xnookie/injex",
+  "version": "1.4.0",
   "description": "Find, remove and decode hidden text: a browser extension (encoders, universal decoder, steganography, hidden-text scanner, paste guard) and a CLI, MCP server, pre-commit hook and GitHub Action that find hidden instructions in files, PDFs and Word documents.",
   "keywords": [
     "prompt-injection",
@@ -19,7 +20,6 @@
     "pre-commit",
     "red-team"
   ],
-  "private": true,
   "type": "module",
   "bin": {
     "injex": "cli/injex.mjs"
@@ -29,9 +29,15 @@
     "src/core/",
     "src/data/",
     "src/transforms/",
+    "vendor/gpt-tokenizer/",
+    "contrib/",
     "action.yml",
+    "server.json",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "!**/__pycache__/",
+    "!**/*.pyc"
   ],
   "engines": {
     "node": ">=20"
@@ -46,6 +52,13 @@
   },
   "homepage": "https://github.com/0xnookie/injex#readme",
   "bugs": "https://github.com/0xnookie/injex/issues",
-  "repository": "github:0xnookie/injex",
-  "license": "AGPL-3.0-or-later"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0xnookie/injex.git"
+  },
+  "license": "AGPL-3.0-or-later",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

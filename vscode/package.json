@@ -1,0 +1,125 @@
+{
+  "name": "injex",
+  "displayName": "injex — hidden text & prompt injection",
+  "description": "Find, decode and remove hidden text in your files: invisible Unicode, tag-character and emoji steganography, look-alike letters, hidden instructions in comments, PDFs and Word files, and risky AI-agent configuration.",
+  "version": "1.4.0",
+  "publisher": "0xnookie",
+  "license": "AGPL-3.0-or-later",
+  "icon": "icon.png",
+  "homepage": "https://github.com/0xnookie/injex#readme",
+  "bugs": "https://github.com/0xnookie/injex/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/0xnookie/injex.git",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "prompt injection",
+    "unicode",
+    "invisible characters",
+    "trojan source",
+    "steganography",
+    "security",
+    "AI agents",
+    "MCP"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "injex only reads files; it never runs code from the workspace."
+    },
+    "virtualWorkspaces": true
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "injex.scanWorkspace",
+        "title": "Scan the workspace for hidden text",
+        "category": "injex"
+      },
+      {
+        "command": "injex.auditAgentFiles",
+        "title": "Audit AI-agent files and configuration",
+        "category": "injex"
+      },
+      {
+        "command": "injex.cleanFile",
+        "title": "Remove hidden characters (file or selection)",
+        "category": "injex"
+      },
+      {
+        "command": "injex.decodeSelection",
+        "title": "Decode selection (hidden payloads, Base64, ROT13 …)",
+        "category": "injex"
+      },
+      {
+        "command": "injex.clearProblems",
+        "title": "Clear injex problems",
+        "category": "injex"
+      }
+    ],
+    "configuration": {
+      "title": "injex",
+      "properties": {
+        "injex.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check open files for hidden text."
+        },
+        "injex.minSeverity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ],
+          "default": "low",
+          "description": "Only report findings at least this severe."
+        },
+        "injex.scanOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check a file again while you type (otherwise on open and save)."
+        },
+        "injex.showDecoded": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show hidden characters and decoded hidden text inline, after the place they hide."
+        },
+        "injex.auditAgentConfig": {
+          "type": "boolean",
+          "default": true,
+          "description": "Audit AI-agent configuration (auto-approve settings, hooks, MCP servers, folder-open tasks, AI workflows)."
+        },
+        "injex.maxFileSize": {
+          "type": "number",
+          "default": 2000000,
+          "description": "Skip text files larger than this many bytes."
+        },
+        "injex.maxDocumentSize": {
+          "type": "number",
+          "default": 50000000,
+          "description": "Skip PDF / Office / e-mail files larger than this many bytes in workspace scans."
+        },
+        "injex.maxFiles": {
+          "type": "number",
+          "default": 5000,
+          "description": "At most this many files in a workspace scan."
+        }
+      }
+    }
+  }
+}

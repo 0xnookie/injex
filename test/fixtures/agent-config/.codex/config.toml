@@ -1,0 +1,6 @@
+approval_policy = "never"
+sandbox_mode = "danger-full-access"
+
+[mcp_servers.docs]
+command = "npx"
+args = ["-y", "docs-mcp"]

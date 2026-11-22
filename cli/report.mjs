@@ -2,10 +2,11 @@
 // viewers) and github (workflow-command annotations plus a job summary).
 
 import { KINDS, SEVERITY_ORDER, visualize } from '../src/core/scan.js';
+import { tagsForFinding, TAGS } from '../src/core/taxonomy.js';
 
 export const SEVERITIES = ['critical', 'high', 'medium', 'low', 'info'];
 const LEVEL = { critical: 'error', high: 'error', medium: 'warning', low: 'note', info: 'note' };
-const SECURITY_SEVERITY = { tags: '9.0', 'vs-bits': '9.0', 'vs-bytes': '9.0', bidi: '7.5', filler: '7.5', 'zero-width': '6.0', comment: '5.0', homoglyph: '4.0' };
+const SECURITY_SEVERITY = { tags: '9.0', 'vs-bits': '9.0', 'vs-bytes': '9.0', bits: '9.0', bidi: '7.5', filler: '7.5', 'zero-width': '6.0', comment: '5.0', homoglyph: '4.0', zalgo: '3.0', encoded: '7.0', 'css-hidden': '6.0', 'doc-hidden': '7.0', metadata: '6.0', 'doc-comment': '5.0', unrendered: '7.0', 'ai-directive': '1.0', exfil: '8.0', 'agent-danger': '8.0', config: '8.0', 'mcp-tool': '8.5', 'mcp-config': '7.5', 'mcp-drift': '8.0', 'event-text': '7.0', canary: '9.0' };
 export const HOME = 'https://github.com/0xnookie/injex';
 
 /** Printable in a terminal / log: no control characters (a hidden payload can carry ESC sequences). */
@@ -75,7 +76,7 @@ export function formatText(result, { color = false, quiet = false } = {}) {
 
 export function formatJson(result, version) {
   const findings = result.files.flatMap(({ file, findings }) =>
-    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, ...(f.loc ? { location: f.loc, where: f.where } : {}), kind: f.kind, label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '' })),
+    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, ...(f.loc ? { location: f.loc, where: f.where } : {}), kind: f.kind, ...(f.rule ? { rule: f.rule } : {}), label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, ...(f.signals?.length ? { signals: f.signals } : {}), ...(f.exfil?.length ? { exfil: f.exfil } : {}), ...(f.agentFile ? { agentFile: true } : {}), count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '', tags: tagsForFinding(f) })),
   );
   return JSON.stringify({ tool: 'injex', version, scanned: result.scanned, skipped: result.skipped, failOn: result.failOn, failing: result.failing, summary: countBySeverity(findings), findings }, null, 2) + '\n';
 }
@@ -92,7 +93,7 @@ export function formatSarif(result, version) {
     helpUri: HOME + '#-command-line-and-ci',
     help: { text: KINDS[k].desc + ' Run `injex clean --write <file>` to remove hidden characters.' },
     defaultConfiguration: { level: k === 'homoglyph' || k === 'comment' ? 'warning' : 'error' },
-    properties: { tags: ['security', 'prompt-injection', 'unicode'], 'security-severity': SECURITY_SEVERITY[k] || '5.0', precision: 'high' },
+    properties: { tags: ['security', 'prompt-injection', ...tagsForFinding({ kind: k })], 'security-severity': SECURITY_SEVERITY[k] || '5.0', precision: k === 'css-hidden' || k === 'homoglyph' || k === 'ai-directive' ? 'medium' : 'high' },
   }));
   const results = result.files.flatMap(({ file, findings }) =>
     findings.map((f) => ({
@@ -101,7 +102,7 @@ export function formatSarif(result, version) {
       level: LEVEL[f.severity] || 'warning',
       message: { text: `${KINDS[f.kind]?.label || f.kind} (${f.severity}): ${message(f, 300, { where: true })}` },
       locations: [{ physicalLocation: { artifactLocation: { uri: encodeURI(file), uriBaseId: '%SRCROOT%' }, region: { startLine: f.line, startColumn: f.column, endColumn: Math.max(f.endColumn || f.column + 1, f.column + 1) } } }],
-      properties: { severity: f.severity, instructions: !!f.instructions, count: f.count },
+      properties: { severity: f.severity, instructions: !!f.instructions, count: f.count, ...(f.rule ? { rule: f.rule } : {}), ...(f.agentFile ? { agentFile: true } : {}), tags: tagsForFinding(f) },
     })),
   );
   return (

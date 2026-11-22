@@ -137,11 +137,15 @@
           <div class="seg" id="scSrc">
             <button data-v="page" class="on">This page</button>
             <button data-v="text">Pasted text</button>
-            <button data-v="file" title="A PDF, Word (.docx) or text file: hidden text, metadata, comments">File</button>
+            <button data-v="file" title="A document, e-mail, calendar, image or text file: hidden text, metadata, comments">File</button>
           </div>
           <button class="btn primary popup-only" id="scGo">
             <svg class="i" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5" /><path d="M20 4v4.5h-4.5" /></svg>
             Scan
+          </button>
+          <button class="btn" id="scAgent" title="Agent view: what an AI agent reads on this page that a person doesn't see — DOM text, accessibility names, metadata, links — and what only a screenshot shows">
+            <svg class="i" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" /><circle cx="12" cy="12" r="2.8" /></svg>
+            Agent view
           </button>
           <select id="scSev" title="Minimum severity">
             <option value="info">All severities</option>
@@ -163,7 +167,7 @@
         <div class="io" id="scFileWrap" hidden>
           <div class="drop slim" id="scDrop" tabindex="0">
             <svg class="i" viewBox="0 0 24 24" style="width: 20px; height: 20px"><path d="M7 3.5h7l4.5 4.5v12.5H7z" /><path d="M14 3.5V8h4.5" /><path d="M9.5 13h6M9.5 16.5h4" /></svg>
-            <div>Drop a <b>PDF</b>, <b>Word (.docx)</b> or text file, or click to choose — read locally, nothing is uploaded</div>
+            <div>Drop a <b>PDF</b>, <b>Word</b>, <b>Excel</b>, <b>PowerPoint</b>, <b>OpenDocument</b>, <b>RTF</b>, <b>e-mail</b> (.eml / .mbox), <b>calendar</b> (.ics), image or text file, or click to choose — read locally, nothing is uploaded</div>
             <input type="file" id="scFile" hidden />
           </div>
         </div>
@@ -198,6 +202,9 @@
           <textarea id="kIn" rows="3" spellcheck="false" placeholder="Text to tokenize"></textarea>
           <div class="io-meta">
             <select id="kEngine" title="Tokenizer"></select>
+            <button class="mini" id="kLoad" title="Load a Hugging Face tokenizer.json (Llama, Qwen, Mistral, Gemma, Phi, DeepSeek, T5, BERT, DeBERTa …) — read locally, nothing is uploaded">tokenizer.json…</button>
+            <button class="mini" id="kForget" title="Forget the loaded tokenizer.json" hidden>Forget</button>
+            <input type="file" id="kFile" accept=".json,application/json" hidden />
             <label class="tgl"><input type="checkbox" id="kIds" /> Token IDs</label>
             <span class="spacer"></span>
             <span class="stat" id="kStat"></span>
@@ -253,6 +260,39 @@
         <main class="list" id="mOut"></main>
       </section>
 
+      <!-- ── Results (injex run) ── -->
+      <section class="view" data-view="results">
+        <div class="toolbar">
+          <div class="seg" id="rsBy">
+            <button data-v="transform" class="on" title="Attack success per transform × defense">Variant</button>
+            <button data-v="defense" title="Attack success per defense">Defense</button>
+            <button data-v="model" title="Attack success per model">Model</button>
+            <button data-v="outcome" title="Answers by outcome class">Outcome</button>
+          </div>
+          <select id="rsFilter" title="Which trials">
+            <option value="all">All trials</option>
+            <option value="success">Successful attacks</option>
+            <option value="failure">Resisted</option>
+            <option value="unlabelled">Not labelled</option>
+            <option value="error">Errors</option>
+          </select>
+          <span class="spacer"></span>
+          <span class="count" id="rsCount"></span>
+          <button class="btn" id="rsSave" hidden title="Download your labels as labels.jsonl (injex report --labels, injex judge-eval)">Save labels</button>
+          <button class="btn" id="rsCsv" hidden title="Download the trials as CSV">CSV</button>
+          <button class="btn" id="rsClear" hidden title="Close the loaded files">Clear</button>
+        </div>
+        <div class="io">
+          <div class="drop slim" id="rsDrop" tabindex="0">
+            <svg class="i" viewBox="0 0 24 24" style="width: 20px; height: 20px"><path d="M4 19.5h16" /><path d="M7 16V10" /><path d="M12 16V5" /><path d="M17 16v-4" /></svg>
+            <div>Drop <b>injex run</b> results (<b>.jsonl</b>) and <b>labels.jsonl</b>, or click to choose — read locally, nothing is uploaded or kept</div>
+            <input type="file" id="rsFile" accept=".jsonl,.json,.ndjson,application/json" multiple hidden />
+          </div>
+        </div>
+        <div class="stats" id="rsStats"></div>
+        <main class="list" id="rsOut"></main>
+      </section>
+
       <!-- ── Batch export ── -->
       <section class="view" data-view="batch">
         <div class="io">
@@ -276,6 +316,14 @@
           <select id="batTpl" title="Template around each payload"></select>
           <input type="text" id="batTplText" class="mono" spellcheck="false" style="flex: 1; min-width: 160px" title="Placeholders: {payload} · {prompt} · {transform} · {category} · {n} — \n for a line break" />
           <label class="tgl" title="Add each prompt unchanged as a control row"><input type="checkbox" id="batOrig" /> Original</label>
+        </div>
+        <div class="toolbar">
+          <span class="muted small">Defense</span>
+          <label class="tgl" title="Also emit each row with the payload between random-id markers (spotlighting: delimit)"><input type="checkbox" class="batDef" value="spotlight_delimit" /> Delimit</label>
+          <label class="tgl" title="Also emit each row with ^ between the payload's words (spotlighting: datamark)"><input type="checkbox" class="batDef" value="spotlight_datamark" /> Datamark</label>
+          <label class="tgl" title="Also emit each row with the payload Base64-encoded behind a header (spotlighting: encode)"><input type="checkbox" class="batDef" value="spotlight_encode" /> Encode</label>
+          <span class="muted small">Seed</span>
+          <input type="text" id="batSeed" class="mono" spellcheck="false" style="width: 90px" placeholder="random" title="A seed makes shuffling transforms and marker ids reproducible; it is recorded in every row" />
         </div>
         <div class="toolbar">
           <div class="seg" id="batFmt"></div>

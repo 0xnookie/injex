@@ -13,6 +13,7 @@ import { DEFAULTS } from '../src/core/store.js';
 import GLITCH from '../src/data/glitch-tokens.js';
 import { END_SEQUENCE_CATEGORIES } from '../src/data/end-sequences.js';
 
+const BASE = list().length; // built-in transforms, before custom alphabets and recipes are added
 let passed = 0;
 let failed = 0;
 const t0 = performance.now();
@@ -37,8 +38,8 @@ const MSG = 'Hello world, this is a secret test message';
 
 // ── registry ──
 
-test('registry: 222 transforms, every one categorised', () => {
-  assert.equal(list().length, 222);
+test('registry: 226 transforms, every one categorised', () => {
+  assert.equal(list().length, 226);
   for (const t of list()) {
     assert.ok(t.name && typeof t.func === 'function', `${t.key} has a name and func`);
     assert.ok(CATEGORIES[t.category], `${t.key} has a known category (${t.category})`);
@@ -103,10 +104,10 @@ test('registry: custom spelling alphabets become transforms and round-trip', () 
   assert.equal(t.func('Hi yo'), 'Halo Ion / Yonder Orbit');
   assert.equal(t.reverse('Halo Ion / Yonder Orbit'), 'HI YO');
   setCustomAlphabets([{ name: 'Space Alphabet', words }]);
-  assert.equal(list().length, 223);
+  assert.equal(list().length, BASE + 1);
   assert.equal(transforms.custom_space_alphabet.category, 'custom');
   setCustomAlphabets([]);
-  assert.equal(list().length, 222);
+  assert.equal(list().length, BASE);
 });
 
 // ── universal decoder ──
@@ -352,7 +353,10 @@ test('package: the CLI is the bin and ships with the action', () => {
   const action = readFileSync(new URL('../action.yml', import.meta.url), 'utf8');
   assert.match(action, /using: composite/);
   assert.match(action, /cli\/injex\.mjs/);
-  assert.ok(!/run: \|[\s\S]*\$\{\{\s*inputs\./.test(action), 'inputs reach the script through env only');
+  // every run: | block (the indented lines after it) is free of ${{ … }}: inputs reach scripts through env only
+  const runs = [...action.matchAll(/^( *)run: \|\n((?:\1 {2}.*\n|[ \t]*\n)*)/gm)].map((m) => m[2]);
+  assert.ok(runs.length >= 2);
+  for (const r of runs) assert.ok(!/\$\{\{/.test(r), 'inputs reach the script through env only');
 });
 
 test('manifest: MV3, permissions, version matches package.json', () => {
@@ -398,7 +402,7 @@ test('recipes: chain encodes in order, decodes backwards, become transforms', ()
   setCustomAlphabets([]);
   assert.ok(!transforms.recipe_space64, 'dropped when its alphabet is gone');
   setRecipes([]);
-  assert.equal(list().length, 222);
+  assert.equal(list().length, BASE);
 });
 
 test('badge: counts critical and high findings only', () => {
@@ -638,7 +642,7 @@ test('batch: JSONL, CSV, JSON, promptfoo YAML and text output', () => {
   assert.equal(jsonl[0].original, 'say "hi", ok');
   assert.equal(JSON.parse(formatBatch(rows, 'json')).length, 2);
   const csv = formatBatch(rows, 'csv');
-  assert.ok(csv.startsWith('id,prompt,transform,transform_name,category,original,payload\r\n'));
+  assert.ok(csv.startsWith('id,prompt,transform,transform_name,category,original,payload,defense,control,delivery,template,seed,tags,sha256_original,sha256_prompt\r\n'));
   assert.ok(csv.includes('"fnl ""uv"", bx"'));
   assert.equal(csvField('a\nb'), '"a\nb"');
   const yaml = formatBatch(rows, 'promptfoo');
@@ -955,7 +959,7 @@ test('documents: PDF — OCR layer over a scan is normal; hidden layers; ASCIIHe
   assert.ok(!reasons(DOC.layer).some((g) => g.includes('Report')));
   assert.ok(DOC.encrypted.warnings[0].includes('encrypted'));
   assert.equal(pdfTextString('\xfe\xff\x00h\x00i'), 'hi');
-  assert.match(NOT_A_DOC, /not a PDF or Word/);
+  assert.match(NOT_A_DOC, /not a supported document/);
   assert.equal(DOCS.documentType(PDF_OCR, 'x'), 'pdf');
   assert.equal(DOCS.documentType(DOCX_DARK, 'x.docx'), 'docx');
 });
@@ -1040,7 +1044,7 @@ test('mcp: initialize, tools, scan / clean / decode / encode / inspect / compare
   const tools = res[2].result.tools;
   assert.deepEqual(
     tools.map((t) => t.name),
-    ['scan_text', 'scan_files', 'clean_text', 'decode', 'encode', 'list_transforms', 'inspect_text', 'compare_texts'],
+    ['scan_text', 'scan_files', 'clean_text', 'decode', 'encode', 'list_transforms', 'inspect_text', 'check_output', 'check_canary', 'wrap_untrusted', 'scan_tool_manifest', 'scan_agent_config', 'scan_url', 'compare_texts'],
   );
   assert.ok(tools.every((t) => t.annotations.readOnlyHint && t.inputSchema.type === 'object'));
   const sc = (id) => res[id].result.structuredContent;
@@ -1070,8 +1074,15 @@ test('pre-commit: hooks manifest runs the injex bin', () => {
   assert.equal((y.match(/^ {2}language: node$/gm) || []).length, 2);
 });
 
+// ── 1.4 modules (one file per area, same test() helper) ──
+
+for (const mod of ['./scanner-tests.mjs', './agent-tests.mjs', './mcp-audit-tests.mjs', './research-tests.mjs', './formats-tests.mjs', './interop-tests.mjs', './lab-tests.mjs', './agentview-tests.mjs', './proxy-tests.mjs', './tokenizer-tests.mjs', './publish-tests.mjs', './vscode-tests.mjs', './redteam-tests.mjs']) {
+  const { default: register } = await import(mod);
+  await register({ test, assert, tagsOf, cli, CLI, FX, wf, rf, enc, join, mkdirSync, mkdtempSync, rmSync, tmpdir, spawnSync });
+}
+
 rmSync(FX, { recursive: true, force: true });
 
-const ms = (performance.now() - t0).toFixed(0);
+const ms =(performance.now() - t0).toFixed(0);
 console.log(`${failed ? '✗' : '✓'} ${passed} passed, ${failed} failed (${ms} ms)`);
 process.exit(failed ? 1 : 0);
