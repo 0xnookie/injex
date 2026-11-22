@@ -14,7 +14,103 @@ let src;
 let last = null; // { url, title, findings, chunks, frames, truncated, at, tabId, error, doc, pdfAccess }
 let textFindings = [];
 let fileResult = null; // { name, size, findings, stats, warnings, error }
-let agent = null; // { view, diff, screenshot, tabId, deep } — the Agent view of the current tab
+let agent = null; // { view, diff, screenshot, tabId, deep, ocr } — the Agent view of the current tab
+let ocrReady = false; // this build has the OCR pack (vendor/packs/ocr)
+let mlReady = false; // this build has the ML runtime and the model is downloaded
+let mlBusy = false;
+
+/** Score the findings on screen with the ML second opinion (plus builds, model downloaded in Settings). */
+async function mlNow() {
+  const list = current();
+  if (mlBusy || !list.length) return;
+  mlBusy = true;
+  render();
+  try {
+    const P = await import('../../src/core/mlpack.js');
+    const n = await P.mlScore(list);
+    ctx.toast(`ML second opinion: ${n} finding${n === 1 ? '' : 's'} scored`);
+  } catch (e) {
+    ctx.toast(e.message || String(e), true);
+  } finally {
+    mlBusy = false;
+    render();
+  }
+}
+const ocrMod = () => import('../../src/core/ocr.js');
+
+/** Progress text from Tesseract's logger, shown in the element #scOcrStatus while OCR runs. */
+function ocrProgress(prefix = '') {
+  return (m) => {
+    const el = document.getElementById('scOcrStatus');
+    if (el && m?.status) el.textContent = `${prefix}${m.status}${m.progress ? ' ' + Math.round(m.progress * 100) + '%' : ''}`;
+  };
+}
+
+/** OCR the scanned file: an image, or the images on a PDF's pages (only text the text layer lacks counts). */
+async function ocrFile() {
+  const fr = fileResult;
+  if (!fr || fr.ocrBusy || !(fr.kind === 'image' || fr.kind === 'pdf')) return;
+  fr.ocrBusy = true;
+  render();
+  const found = [];
+  const notes = [];
+  let chars = 0;
+  try {
+    const O = await ocrMod();
+    if (fr.kind === 'image') {
+      const r = await O.ocrImage(fr.file, { onProgress: ocrProgress() });
+      chars = r.text.length;
+      fr.ocrText = r.text;
+      found.push(...O.ocrFindings(r, { where: 'image (OCR)', loc: 'ocr' }));
+      if (r.faint.length) notes.push(`${r.faint.length} line${r.faint.length === 1 ? '' : 's'} of faint text`);
+    } else {
+      const [{ readPdfImages }, { documentText }] = await Promise.all([import('../../src/core/docs/pdf.js'), docs()]);
+      const known = await documentText(fr.bytes, fr.name).catch(() => '');
+      const { images, skipped } = await readPdfImages(fr.bytes);
+      const texts = [];
+      for (const [i, im] of images.entries()) {
+        const r = await O.ocrImage(im.mime ? new Blob([im.data], { type: im.mime }) : im, { known, onProgress: ocrProgress(`page ${im.page}, image ${i + 1} of ${images.length}: `) });
+        chars += r.text.length;
+        texts.push(r.text);
+        found.push(...O.ocrFindings(r, { where: `page ${im.page} image (OCR)`, loc: `p.${im.page}`, source: 'pdf' }));
+      }
+      fr.ocrText = texts.join('\n\n');
+      notes.push(images.length ? `${images.length} page image${images.length === 1 ? '' : 's'} read` : 'no page images large enough to read');
+      if (skipped) notes.push(`${skipped} in formats the OCR pack can’t decode (JPEG 2000, JBIG2, CCITT)`);
+    }
+    fr.findings = [...fr.findings, ...found].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+    fr.ocr = { chars, found: found.length, notes };
+  } catch (e) {
+    fr.ocr = { error: e.message || String(e) };
+  } finally {
+    fr.ocrBusy = false;
+    await ocrMod().then((O) => O.ocrStop()).catch(() => {});
+  }
+  if (fileResult === fr) {
+    render();
+    updateCount();
+  }
+}
+
+/** OCR the Agent view's screenshot: text only the screenshot shows (images, canvas) and faint text. */
+async function ocrScreenshot() {
+  const a = agent;
+  if (!a?.screenshot || a.ocrBusy) return;
+  a.ocrBusy = true;
+  render();
+  try {
+    const O = await ocrMod();
+    const known = [a.view.dom, a.view.rendered, a.view.a11y, ...(a.view.names || []).map((n) => n.text)].join(' ');
+    const r = await O.ocrImage(a.screenshot, { known, onProgress: ocrProgress() });
+    a.ocr = { ...r, findings: O.ocrFindings(r, { where: 'screenshot (OCR)', loc: 'ocr' }) };
+  } catch (e) {
+    a.ocr = { error: e.message || String(e) };
+  } finally {
+    a.ocrBusy = false;
+    await ocrMod().then((O) => O.ocrStop()).catch(() => {});
+  }
+  if (agent === a) render();
+}
 const hasTabs = typeof chrome !== 'undefined' && !!chrome.scripting;
 const isPdfUrl = (url) => {
   try {
@@ -44,6 +140,7 @@ function findingRow(f, i) {
       h('span', { class: 'pill ' + sevClass(f.severity), text: f.severity }),
       h('span', { class: 'label', text: k.label }),
       f.instructions ? h('span', { class: 'chip bad', title: 'The hidden text reads like instructions to an AI model', text: 'instructions' }) : null,
+      f.ml ? h('span', { class: 'chip' + (f.ml.score >= 0.5 ? ' bad' : ''), title: `Injection probability from the ML second opinion (${f.ml.model})`, text: `ML ${f.ml.score.toFixed(2)}` }) : null,
       // in documents the reason matters most: "white text on a white page · page 2"
       h('span', { class: 'src', title: where(f), text: f.loc && f.note ? `${f.note} · ${where(f)}` : where(f) || f.note }),
       h('span', { class: 'spacer' }),
@@ -182,6 +279,13 @@ function render() {
     else {
       setBanner(all.some((f) => f.severity === 'critical' || f.severity === 'high') ? 'bad' : all.length ? '' : 'ok', h('span', { title: fileResult.name, text: `${fileResult.name} — ${fileResult.stats ? docSummary(fileResult.stats) : `${fileResult.lines.toLocaleString()} lines`}` }));
       for (const w of fileResult.warnings || []) list.append(h('div', { class: 'hint', text: w }));
+      if (ocrReady && (fileResult.kind === 'image' || fileResult.kind === 'pdf')) {
+        const o = fileResult.ocr;
+        if (fileResult.ocrBusy) list.append(h('div', { class: 'hint' }, 'Reading text in the image — ', h('span', { id: 'scOcrStatus', text: 'starting…' })));
+        else if (o?.error) list.append(h('div', { class: 'hint', text: `OCR failed: ${o.error}` }));
+        else if (o) list.append(h('div', { class: 'hint' }, `OCR read ${o.chars.toLocaleString()} characters${o.notes.length ? ' — ' + o.notes.join(', ') : ''}; ${o.found ? `${o.found} finding${o.found === 1 ? '' : 's'}` : 'nothing hidden or instruction-like'}. `, fileResult.ocrText ? h('button', { class: 'mini', onclick: () => ctx.copy(fileResult.ocrText, 'OCR text') }, 'Copy the text') : null));
+        else list.append(h('div', { class: 'row-actions' }, h('button', { class: 'btn', title: 'Read the text in the image (or in the images on the PDF’s pages) with the OCR pack: faint, near-background text and text that only the image shows. Runs on this computer.', onclick: ocrFile }, fileResult.kind === 'pdf' ? 'Read the page images (OCR)' : 'Read the text in the image (OCR)')));
+      }
     }
     if (fileResult.error) return;
   } else if (!isText) {
@@ -221,6 +325,7 @@ function render() {
     list.append(empty('∅', 'All findings filtered out', 'Lower the severity filter or turn off “Instructions”.'));
     return;
   }
+  if (mlReady && all.some((f) => f.payload && !f.ml)) list.append(h('div', { class: 'row-actions' }, h('button', { class: 'btn', disabled: mlBusy, title: 'Score the hidden text of these findings with the prompt-injection classifier (runs on this computer)', onclick: mlNow }, mlBusy ? 'Scoring…' : 'ML second opinion')));
   shown.forEach((f, i) => list.append(findingRow(f, i)));
 }
 
@@ -275,7 +380,8 @@ async function scanFile(file) {
     const { scanDocument, documentType } = await docs();
     if (documentType(bytes, file.name)) {
       const d = await scanDocument(bytes, file.name);
-      fileResult = { name: file.name, size: file.size, findings: d.findings, stats: d.stats, warnings: d.warnings };
+      const kind = documentType(bytes, file.name);
+      fileResult = { name: file.name, size: file.size, findings: d.findings, stats: d.stats, warnings: d.warnings, kind, file, ...(kind === 'pdf' ? { bytes } : {}) };
     } else {
       if (bytes.subarray(0, 8000).includes(0)) throw new Error('a binary file this scanner doesn’t read — documents (PDF, Office, OpenDocument, RTF), e-mail, calendar, images and text files can be checked');
       const text = new TextDecoder().decode(bytes);
@@ -362,8 +468,11 @@ function renderAgent(list, setBanner) {
       { class: 'row-actions' },
       h('button', { class: 'btn', onclick: exportJson }, icon('copy'), 'Export JSON'),
       h('button', { class: 'btn', title: 'Read the browser’s full accessibility tree through the debugger API: asks for the permission, Chrome shows its debugging banner while it runs, and the permission is given back afterwards', onclick: deepAccessibility }, agent.deep ? `Accessibility tree: ${agent.deep} names` : 'Full accessibility tree…'),
+      ocrReady && agent.screenshot && !agent.ocr ? h('button', { class: 'btn', disabled: !!agent.ocrBusy, title: 'Read the screenshot with the OCR pack: text that only the screenshot shows (images, canvas) and faint, near-background text. Runs on this computer.', onclick: ocrScreenshot }, agent.ocrBusy ? 'Reading the screenshot…' : 'Read the screenshot (OCR)') : null,
     ),
   );
+  if (agent.ocrBusy) list.append(h('div', { class: 'hint' }, 'OCR: ', h('span', { id: 'scOcrStatus', text: 'starting…' })));
+  if (agent.ocr?.error) list.append(h('div', { class: 'hint', text: `OCR failed: ${agent.ocr.error}` }));
   const ch = d.channels;
   list.append(h('div', { class: 'hint', text: `Channels — DOM text ${ch.dom.toLocaleString()} characters · rendered text ${ch.rendered.toLocaleString()} · accessibility text ${ch.a11y.toLocaleString()} · ${ch.names} accessible names · ${ch.meta} meta / JSON-LD · ${ch.links} links${ch.shadowRoots ? ` · ${ch.shadowRoots} shadow roots` : ''}` }));
   const section = (title) => list.append(h('div', { class: 'hint', style: 'margin-top:10px;font-weight:600', text: title }));
@@ -385,6 +494,14 @@ function renderAgent(list, setBanner) {
   if (d.leaks.length) {
     section('Links and the page URL');
     for (const x of d.leaks.slice(0, 100)) list.append(row({ head: [h('span', { class: 'pill ' + (x.severity === 'info' ? 'low' : x.severity), text: x.severity }), h('span', { class: 'label', text: x.rule })], value: `${x.note}: ${x.match}` }));
+  }
+  if (agent.ocr && !agent.ocr.error) {
+    const o = agent.ocr;
+    section(`Read from the screenshot (OCR) — ${o.unseen.length} line${o.unseen.length === 1 ? '' : 's'} not in the page’s text, ${o.faint.length} faint`);
+    for (const f of o.findings) list.append(findingRow(f, 0));
+    for (const t of o.faint) list.append(row({ head: [h('span', { class: 'chip bad', text: 'faint' }), h('span', { class: 'src', text: 'near-background colour' })], value: t }));
+    for (const t of o.unseen.slice(0, 100)) list.append(row({ head: [h('span', { class: 'src', text: 'only in the screenshot (image, canvas …)' })], value: t }));
+    if (!o.faint.length && !o.unseen.length) list.append(h('div', { class: 'hint', text: 'The screenshot shows no text that the page’s own text lacks.' }));
   }
   if (agent.screenshot) {
     section('What a vision agent sees (the visible part of the page)');
@@ -459,6 +576,20 @@ function report() {
 
 export async function init(c) {
   ctx = c;
+  import('../../src/core/mlpack.js')
+    .then(async (P) => (await P.mlRuntimeAvailable()) && (await P.mlModelStatus()).ready)
+    .then((v) => {
+      mlReady = !!v;
+      if (v) render();
+    })
+    .catch(() => {});
+  ocrMod()
+    .then((O) => O.ocrAvailable())
+    .then((v) => {
+      ocrReady = v;
+      if (v && (fileResult || agent)) render();
+    })
+    .catch(() => {});
   src = seg($('scSrc'), () => {
     render();
     updateCount();

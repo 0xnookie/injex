@@ -123,6 +123,16 @@
         </div>
       </section>
 
+      <section class="card" id="ml" hidden>
+        <h2>ML second opinion</h2>
+        <p>This build carries ONNX Runtime, so a prompt-injection classifier can score what the scanner finds — next to its severity, never instead of it. The model is downloaded once from Hugging Face when you ask (ProtectAI deberta-v3-base-prompt-injection-v2, Apache-2.0, 747 MB; the exact revision, size and SHA-256 are checked before it is kept) and stays in this browser.</p>
+        <div class="row-actions">
+          <button class="btn" id="mlGet" type="button">Download the model (747 MB)</button>
+          <button class="btn ghost" id="mlDel" type="button" hidden>Delete the model</button>
+          <span class="hint" id="mlStatus"></span>
+        </div>
+      </section>
+
       <section class="card" id="stego">
         <h2>Emoji steganography</h2>
         <p>How “Emoji · bits” encodes: one variation selector per bit after the carrier. Change these only to match another tool — the decoder uses the same settings.</p>

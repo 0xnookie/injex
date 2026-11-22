@@ -7,6 +7,7 @@
 // (background.scripts, not service_worker), needs a gecko id and opens the settings via options_ui.
 
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { AI_DATA } from '../src/core/consent.js';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { zip } from './zip.mjs';
@@ -15,10 +16,10 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT = join(ROOT, 'dist', 'firefox');
 const SHIP = ['manifest.json', 'LICENSE', 'icons', 'fonts', 'src', 'ui', 'vendor'];
 export const GECKO_ID = 'injex@0xnookie';
-export const MIN_FIREFOX = '128.0'; // MV3 scripting + storage.session, Intl.Segmenter, CSS :has / color-mix
+export const MIN_FIREFOX = '140.0'; // built-in data consent (data_collection_permissions); MV3 scripting, storage.session …
 
-/** Chrome manifest → Firefox manifest (pure, tested). */
-export function firefoxManifest(m) {
+/** Chrome manifest → Firefox manifest (pure, tested). opts.id: another gecko id (the plus build). */
+export function firefoxManifest(m, { id = GECKO_ID } = {}) {
   const f = structuredClone(m);
   f.background = { scripts: [m.background.service_worker], type: m.background.type || 'module' };
   delete f.minimum_chrome_version;
@@ -33,11 +34,11 @@ export function firefoxManifest(m) {
   }
   f.browser_specific_settings = {
     gecko: {
-      id: GECKO_ID,
+      id,
       strict_min_version: MIN_FIREFOX,
-      // nothing is collected or sent anywhere by the extension itself (AI tools talk to the user's own
-      // OpenRouter account, on request); Firefox < 140 ignores this key
-      data_collection_permissions: { required: ['none'] },
+      // injex collects nothing; the optional AI tools send what the person types (and their OpenRouter key)
+      // to openrouter.ai when they click — Firefox asks for these categories the first time (src/core/consent.js)
+      data_collection_permissions: { required: ['none'], optional: [...AI_DATA] },
     },
   };
   return f;
@@ -52,18 +53,27 @@ function files(dir, out = []) {
   return out;
 }
 
+/** Copy what the extension loads into `out`; the optional packs (vendor/packs) only when asked for. */
+export function copyShip(out, { packs = false } = {}) {
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  const packsDir = join(ROOT, 'vendor', 'packs');
+  for (const p of SHIP) cpSync(join(ROOT, p), join(out, p), { recursive: true, filter: (src) => packs || !(src === packsDir || src.startsWith(packsDir + sep)) });
+}
+
+/** The files of a folder as ZIP entries (sorted, forward slashes). */
+export function zipFolder(dir, zipPath) {
+  const entries = files(dir)
+    .sort()
+    .map((p) => ({ name: relative(dir, p).split(sep).join('/'), data: readFileSync(p) }));
+  writeFileSync(zipPath, zip(entries));
+}
+
 export function build({ zip: zipPath = null } = {}) {
-  rmSync(OUT, { recursive: true, force: true });
-  mkdirSync(OUT, { recursive: true });
-  for (const p of SHIP) cpSync(join(ROOT, p), join(OUT, p), { recursive: true });
+  copyShip(OUT);
   const manifest = firefoxManifest(JSON.parse(readFileSync(join(ROOT, 'manifest.json'), 'utf8')));
   writeFileSync(join(OUT, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  if (zipPath) {
-    const entries = files(OUT)
-      .sort()
-      .map((p) => ({ name: relative(OUT, p).split(sep).join('/'), data: readFileSync(p) }));
-    writeFileSync(zipPath, zip(entries));
-  }
+  if (zipPath) zipFolder(OUT, zipPath);
   return { dir: OUT, version: manifest.version, zip: zipPath };
 }
 

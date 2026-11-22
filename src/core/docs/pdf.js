@@ -915,7 +915,7 @@ async function runPage(doc, page, pageNo, ocOff) {
           const e = doc.entry(ref);
           const x = e?.value || doc.get(ref);
           const st = nameOf(x?.Subtype);
-          if (st === 'Image') fills.push({ box: bboxOf([apply(gs.ctm, 0, 0), apply(gs.ctm, 1, 0), apply(gs.ctm, 0, 1), apply(gs.ctm, 1, 1)]), image: true, order: order++ });
+          if (st === 'Image') fills.push({ box: bboxOf([apply(gs.ctm, 0, 0), apply(gs.ctm, 1, 0), apply(gs.ctm, 0, 1), apply(gs.ctm, 1, 1)]), image: true, order: order++, ref: e, res });
           else if (st === 'Form' && e && depth < 8) {
             const m = doc.get(x.Matrix);
             const fgs = { ...gs, ctm: Array.isArray(m) && m.length === 6 ? mul(m.map((v) => doc.get(v)), gs.ctm) : gs.ctm };
@@ -978,6 +978,70 @@ function classify(it, page, ocr) {
     }
   }
   return '';
+}
+
+/** One image XObject as JPEG bytes or raw 8-bit pixels (what the OCR pack can read), or null. */
+async function imageData(doc, e, res) {
+  const d = e?.value || {};
+  if (doc.get(d.ImageMask) === true) return null;
+  const width = doc.get(d.Width);
+  const height = doc.get(d.Height);
+  if (!(width > 0 && height > 0)) return null;
+  const filters = [].concat(doc.get(d.Filter) ?? []).map((f) => nameOf(doc.get(f)));
+  const last = filters.at(-1);
+  if (last === 'DCTDecode' || last === 'DCT') return { mime: 'image/jpeg', data: await doc.streamBytes(e), width, height };
+  if (filters.some((f) => !['FlateDecode', 'Fl', 'LZWDecode', 'LZW', 'ASCII85Decode', 'A85', 'ASCIIHexDecode', 'AHx', 'RunLengthDecode', 'RL'].includes(f))) return null; // JPX, JBIG2, CCITT
+  const bpc = doc.get(d.BitsPerComponent) ?? 8;
+  let cs = doc.get(d.ColorSpace);
+  if (typeof nameOf(cs) === 'string' && !Array.isArray(cs)) cs = doc.get((doc.get(doc.get(res)?.ColorSpace) || {})[nameOf(cs)]) ?? cs;
+  const family = Array.isArray(cs) ? nameOf(doc.get(cs[0])) : nameOf(cs);
+  const channels = family === 'DeviceGray' || family === 'G' || family === 'CalGray' ? 1 : family === 'DeviceRGB' || family === 'RGB' || family === 'CalRGB' ? 3 : family === 'ICCBased' ? doc.get(doc.get(cs[1])?.N) : 0;
+  if (channels !== 1 && channels !== 3) return null;
+  const raw = await doc.streamBytes(e);
+  const decode = doc.get(d.Decode);
+  const invert = Array.isArray(decode) && doc.get(decode[0]) === 1;
+  if (bpc === 8 && raw.length >= width * height * channels) return { raw: { width, height, channels, pixels: invert ? raw.map((v) => 255 - v) : raw.subarray(0, width * height * channels) } };
+  if (bpc === 1 && channels === 1) {
+    // 1-bit scans: 0 is black unless /Decode [1 0]
+    const row = Math.ceil(width / 8);
+    if (raw.length < row * height) return null;
+    const pixels = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) pixels[y * width + x] = (raw[y * row + (x >> 3)] >> (7 - (x & 7))) & 1 ? (invert ? 0 : 255) : invert ? 255 : 0;
+    return { raw: { width, height, channels: 1, pixels } };
+  }
+  return null;
+}
+
+/**
+ * The images drawn on a PDF's pages that the OCR pack can read: [{ page, width, height, mime?, data?, raw? }]
+ * (JPEG and 8-bit / 1-bit grey or RGB images; JPEG 2000, JBIG2 and CCITT are skipped and counted).
+ */
+export async function readPdfImages(bytes, { maxPages = 30, maxImages = 40, minPixels = 60000 } = {}) {
+  const doc = await new PdfDoc(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)).load();
+  if (doc.encrypted) return { images: [], skipped: 0, encrypted: true };
+  const pages = doc.pages().slice(0, maxPages);
+  const images = [];
+  const seen = new Set();
+  let skipped = 0;
+  for (let i = 0; i < pages.length && images.length < maxImages; i++) {
+    let r;
+    try {
+      r = await runPage(doc, pages[i], i + 1, () => false);
+    } catch {
+      continue;
+    }
+    for (const f of r.fills.filter((x) => x.image && x.ref)) {
+      if (seen.has(f.ref) || images.length >= maxImages) continue;
+      seen.add(f.ref);
+      const w = doc.get(f.ref.value?.Width) || 0;
+      const h = doc.get(f.ref.value?.Height) || 0;
+      if (w * h < minPixels) continue;
+      const img = await imageData(doc, f.ref, f.res).catch(() => null);
+      if (img) images.push({ page: i + 1, ...img });
+      else skipped++;
+    }
+  }
+  return { images, skipped, pages: doc.pages().length };
 }
 
 /**

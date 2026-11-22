@@ -48,6 +48,8 @@ Usage
                                  --fail-on-asr for CI
   injex review <results.jsonl>   label answers by hand (full, refuse-then-comply, partial, refusal …)
   injex judge-eval <results>     how well each automatic score agrees with the human labels
+  injex ml status|fetch|score    the optional ML second opinion: a prompt-injection classifier you
+                                 download once (injex scan --ml, --classifier ml)
   injex inspect [text]           every character: code point, name, category, script, flags
   injex tokens [text]            how a tokenizer cuts the text: the bundled GPT encodings (--encoding) or a
                                  Hugging Face tokenizer.json (--tokenizer: Llama, Qwen, Mistral, Gemma, Phi,
@@ -133,6 +135,10 @@ async function cmdScan(argv) {
       tag: { type: 'string', multiple: true, default: [] },
       'no-audit': { type: 'boolean', default: false },
       'audit-only': { type: 'boolean', default: false },
+      ml: { type: 'boolean', default: false },
+      'ml-model': { type: 'string' },
+      'ml-tokenizer': { type: 'string' },
+      'ml-positive': { type: 'string' },
     },
   });
   if (!['text', 'json', 'sarif', 'github'].includes(o.format)) fail(`unknown --format ${o.format}`);
@@ -195,6 +201,19 @@ async function cmdScan(argv) {
   for (const f of result.files) f.findings = f.findings.filter((x) => rank(x.severity) <= minRank && (!o.tag.length || o.tag.some((t) => hasTag(tagsForFinding(x), t))));
   const all = result.files.flatMap((f) => f.findings);
   result.failing = o['fail-on'] === 'none' ? 0 : all.filter((x) => rank(x.severity) <= rank(o['fail-on'])).length;
+  // the ML second opinion: a score next to each finding that carries hidden text; severities stay as they are
+  if (o.ml || o['ml-model']) {
+    const { loadClassifier } = await import('./ml.mjs');
+    const { scoreFindings, DEFAULT_MODEL } = await import('../src/core/ml.js');
+    let c;
+    try {
+      c = await loadClassifier({ model: o['ml-model'] || DEFAULT_MODEL, tokenizer: o['ml-tokenizer'], positive: o['ml-positive'] !== undefined ? Number(o['ml-positive']) : undefined });
+    } catch (e) {
+      fail(e.message);
+    }
+    const n = await scoreFindings(all, c);
+    process.stderr.write(`injex: ${c.name} scored ${n} finding${n === 1 ? '' : 's'}\n`);
+  }
 
   let report;
   if (o.format === 'json') report = formatJson(result, VERSION);
@@ -959,7 +978,7 @@ async function cmdMcp(argv) {
 
 const cmdAudit = (argv) => cmdScan(['--audit-only', ...argv]);
 
-const COMMANDS = { scan: cmdScan, audit: cmdAudit, event: cmdEvent, 'mcp-audit': cmdMcpAudit, 'mcp-proxy': cmdMcpProxy, batch: cmdBatch, run: cmdRun, report: cmdReport, results: cmdResults, review: cmdReview, 'judge-eval': cmdJudgeEval, import: cmdImport, jsonl: cmdJsonl, lab: cmdLab, url: cmdUrl, clean: cmdClean, decode: cmdDecode, encode: cmdEncode, list: cmdList, inspect: cmdInspect, tokens: async (argv) => (await import('./tokens.mjs')).cmdTokens(argv, { parseArgs, textArg, fail, useColor }), diff: cmdDiff, mcp: cmdMcp, canary: cmdCanary };
+const COMMANDS = { scan: cmdScan, audit: cmdAudit, event: cmdEvent, 'mcp-audit': cmdMcpAudit, 'mcp-proxy': cmdMcpProxy, batch: cmdBatch, run: cmdRun, report: cmdReport, results: cmdResults, review: cmdReview, 'judge-eval': cmdJudgeEval, import: cmdImport, jsonl: cmdJsonl, lab: cmdLab, url: cmdUrl, clean: cmdClean, decode: cmdDecode, encode: cmdEncode, list: cmdList, inspect: cmdInspect, tokens: async (argv) => (await import('./tokens.mjs')).cmdTokens(argv, { parseArgs, textArg, fail, useColor }), ml: async (argv) => (await import('./ml.mjs')).cmdMl(argv, { parseArgs, fail, textArg }), diff: cmdDiff, mcp: cmdMcp, canary: cmdCanary };
 
 async function main(argv) {
   const [cmd, ...rest] = argv;

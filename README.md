@@ -51,6 +51,7 @@ Language models read text differently from people. A Unicode tag character is in
 - **Generates payloads.** Splitter (cut a payload across messages, every word broken in half), Mutation Lab (seeded fuzz variants), Tokenade (token bombs), Bijection prompts, Gibberish dictionaries, QR / barcodes, your own spelling alphabets.
 - **Exports test sets.** *Batch* runs your prompts through every transform you pick (and spotlighting defences), wraps them in a template and downloads JSONL, CSV, JSON, promptfoo, Inspect or garak files for your evaluation harness.
 - **Runs experiments.** `injex lab` builds a corpus of carriers hiding a canary (web, Markdown, agent files, e-mail, calendar, MCP manifests, tool output, PDF, Word) and serves it — as web pages or as a mock MCP server — logging what comes back; `injex run` sends rows to a chat API, the Anthropic or Responses API, any HTTP endpoint or a local agent command (attachments, scripted turns, tools) and scores the answers, refuse-then-comply included, with confidence intervals; `injex review` and the *Results* tab collect human labels, `injex judge-eval` measures how well each automatic score agrees with them, and `injex results` exports CSV, JUnit and SARIF for CI. A Python bridge plugs injex into garak, PyRIT, Spikee, DeepTeam, AgentDojo and StrongREJECT. Numbers in [BENCHMARKS.md](BENCHMARKS.md).
+- **Reads images, optionally.** The *plus* builds add an OCR pack (Tesseract.js, bundled — no CDN): text that only an image, a canvas or a scanned PDF page shows, and **faint text** in a colour barely different from the background, found by reading a contrast-enhanced copy. They also carry ONNX Runtime for an **ML second opinion**: a prompt-injection classifier you download once (747 MB) scores what the scanner finds, next to its severity — in the extension and with `injex scan --ml`.
 - **In your editor.** The VS Code / Open VSX extension shows hidden text as problems while you type, decodes it inline and on hover, and removes it with a quick fix.
 - **Bring your own model.** PromptCraft rewrites, Anti-Classifier and translation (including dead and constructed languages) through OpenRouter with your key — the only feature that touches the network.
 - **Private.** No telemetry, no remote code, no host permissions: page access only happens through `activeTab`, when you click — unless you switch on Live scan or the paste guard, which ask for it.
@@ -192,7 +193,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: 0xnookie/injex@v1.4.0
+      - uses: 0xnookie/injex@v1.5.0
         with:
           path: .                 # files or folders, space- or newline-separated
           fail-on: high           # critical | high | medium | low | none
@@ -203,7 +204,7 @@ jobs:
 For GitHub code scanning, write SARIF and upload it (`permissions: security-events: write`):
 
 ```yaml
-      - uses: 0xnookie/injex@v1.4.0
+      - uses: 0xnookie/injex@v1.5.0
         with:
           fail-on: none
           sarif: injex.sarif
@@ -220,7 +221,7 @@ The action's outputs `findings` and `failing` count what was reported. With `sca
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/0xnookie/injex
-    rev: v1.4.0
+    rev: v1.5.0
     hooks:
       - id: injex          # fail the commit on hidden text (high and up), PDFs and Word files included
       # - id: injex-clean  # or strip hidden characters from staged text files
@@ -275,6 +276,7 @@ injex results results.jsonl -f junit -o injex-junit.xml --fail-on-asr 0.1   # a 
 | **Statistics** | Wilson intervals per attempt; with `-n` repeats a row-level cluster bootstrap and hit@k; uplift over the control rows; `--by transform,defense,model,template,…`. |
 | **People** | `injex review` (or the extension's *Results* tab) labels answers into `injex.label/1`; labels override automatic scores in `results` and `report`, and `injex judge-eval` gives each automatic signal's precision, recall, F1 and Cohen's κ against them (Krippendorff's α between raters). |
 | **Export** | `injex results` merges files and writes `table`, `json`, `csv`, `junit` (a successful attack is a failed test), `sarif` (one finding per successful attack, pointing at the row), `jsonl` or `md`; `--where scores.canary=true`; `--fail-on-asr`. `injex batch -f pyrit` writes a PyRIT seed dataset, and `injex import` reads one (`.prompt` / `.yaml`). |
+| **ML second opinion** | `injex ml fetch` downloads ONNX Runtime Web and a pinned classifier (ProtectAI deberta-v3-base-prompt-injection-v2, Apache-2.0, 747 MB) into a cache folder, hashes checked; then `injex ml score "…"`, `injex scan --ml` (a score next to each finding with hidden text) and `injex run rows --target-type classifier --classifier ml --negatives benign.txt` (its recall at a fixed false-positive rate). Your own export works too: `--ml-model model.onnx --ml-tokenizer tokenizer.json`. |
 | **Indirect injection** | `injex lab serve lab/` serves the corpus on this machine and logs every request — a canary in a URL means an agent rendered the exfil-image carriers. `injex lab mcp lab/` is a mock MCP server whose `get_weather` tool carries a poisoned definition and result from the lab (`--sink` adds a `send_message` tool; a canary in its arguments is flagged). `injex mcp-proxy --mode inject -- <server>` adds the canary instruction to a real server's tool results. |
 
 The payloads injex generates are benign canary instructions (`include the code INJX-… in your answer`), so a run shows which channel reached the model without anything harmful in the corpus. injex does not generate attack prompts with a model and ships no jailbreak-grading prompt: bring your own judge prompt (for example a published rubric) with `--judge-prompt`.
@@ -289,7 +291,7 @@ The extension in `vscode/` (`injex-vscode-<version>.vsix` on the releases; *Exte
 
 ```
            ┌──────────── popup / dashboard (ui/) ────────────┐        ┌── options.html ──┐
- you ────▶ │ 17 tabs, lazy-loaded view modules (ui/views/)   │ ◀────▶ │ settings, menu,  │
+ you ────▶ │ 18 tabs, lazy-loaded view modules (ui/views/)   │ ◀────▶ │ settings, menu,  │
            └───────┬─────────────────────────────────────────┘        │ live scan, paste │
                    │ imports                                           │ guard, backup    │
                    ▼                                                   └────────┬─────────┘
@@ -336,17 +338,19 @@ The extension in `vscode/` (`injex-vscode-<version>.vsix` on the releases; *Exte
 
 No build step and no runtime dependencies. Chrome / Edge 116+. Tagged releases also ship a ZIP of the extension.
 
+**Plus builds** (`injex-plus-<version>.zip`, `injex-plus-firefox-<version>.zip` on the releases): the same extension with the OCR pack (Tesseract.js 7, its WebAssembly core and English data — 7 MB) and ONNX Runtime Web (15 MB) for the ML second opinion; their manifest allows WebAssembly (`'wasm-unsafe-eval'`), the default builds don't. From a clone: `node tools/fetch-packs.mjs && node tools/build-plus.mjs` (every file pinned by SHA-256 in `src/data/packs.json`) and load `dist/plus/chrome/`.
+
 **Command line:** `npx github:0xnookie/injex --help` (Node 20+; the npm package is `@0xnookie/injex`), clone and run `node cli/injex.mjs`, or `docker run --rm -v "$PWD:/work:ro" ghcr.io/0xnookie/injex scan` when the image is published. See [Command line and CI](#-command-line-and-ci).
 
 **VS Code / Open VSX:** install `injex-vscode-<version>.vsix` from the releases (*Install from VSIX…*), or build it with `node tools/build-vscode.mjs`. **Claude Desktop:** open `injex-mcp-<version>.mcpb`.
 
-**Firefox 128+:** download `injex-firefox-<version>.zip` from the [releases](https://github.com/0xnookie/injex/releases) (or run `node tools/build-firefox.mjs`, which writes `dist/firefox/`), open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** and pick the ZIP or `dist/firefox/manifest.json`. Same code, a Firefox manifest. Release Firefox keeps an unsigned add-on until it restarts; Developer Edition / Nightly can keep it with `xpinstall.signatures.required` set to `false`. Shortcuts are changed under `about:addons` → ⚙ → *Manage Extension Shortcuts*.
+**Firefox 140+:** download `injex-firefox-<version>.zip` from the [releases](https://github.com/0xnookie/injex/releases) (or run `node tools/build-firefox.mjs`, which writes `dist/firefox/`), open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** and pick the ZIP or `dist/firefox/manifest.json`. Same code, a Firefox manifest. Release Firefox keeps an unsigned add-on until it restarts; Developer Edition / Nightly can keep it with `xpinstall.signatures.required` set to `false`. Shortcuts are changed under `about:addons` → ⚙ → *Manage Extension Shortcuts*.
 
 ---
 
 ## 🕹️ Usage
 
-- **Popup** (780 × 590): all 17 tabs; **Ctrl+1…9** switches between the first nine. Text you type is kept for the browser session, so closing the popup loses nothing. **Scan page** in the header scans the current tab.
+- **Popup** (780 × 590): all 18 tabs; **Ctrl+1…9** switches between the first nine. Text you type is kept for the browser session, so closing the popup loses nothing. **Scan page** in the header scans the current tab.
 - **Dashboard** (⤢ in the popup, or *Open dashboard* in the right-click menu): the same in a full tab. A right-click scan opens its results here.
 - **Right-click** a selection → **injex**: decode it, encode it with one of your menu transforms (pick them in Settings or with the *Menu* switch on any transform), clean it, inspect its characters, hide it in an emoji or as invisible tags, or scan the page.
 - **Chaining**: *Use as input* in Transform, *Decode further* in Decode, and *Decode* / *Transform* / *Tokenize* / *Split* buttons move a result between tabs.
@@ -362,9 +366,11 @@ No build step and no runtime dependencies. Chrome / Edge 116+. Tagged releases a
 | Page scan, right-click actions | on click | none; injects a function into the tab you clicked (`activeTab`) |
 | **Live scan** | **off** | none; asks for permission to read all sites, then scans each page locally as it loads and when new text settles. Every site, every site except a list, or only a list. Switching it off gives the permission back |
 | **Paste guard** | **off** | none; asks for permission for the listed AI chat sites (editable) and checks pastes there locally. Switching it off gives the permission back |
-| AI tools, alphabet generation, *Test key*, *Load the full model list* | manual | requests to `openrouter.ai` with your key (the model list needs no key) |
+| AI tools, alphabet generation, *Test key*, *Load the full model list* | manual | requests to `openrouter.ai` with your key (the model list needs no key). Firefox asks for data consent the first time you use one (the text you send, page content you paste, your key); declining keeps them off |
 | Tokenizer tab: *tokenizer.json…* | manual | none; the file is read locally and kept in the extension's IndexedDB until you click *Forget* |
 | Results tab | manual | none; results and labels files are read locally and dropped when you close the tab |
+| OCR (plus builds): *Read the text in the image*, *Read the page images*, *Read the screenshot* | manual | none; Tesseract.js and its English data are bundled and run in the extension |
+| ML second opinion (plus builds): *Download the model* in Settings | manual | one download of the pinned model from `huggingface.co` (747 MB, revision, size and SHA-256 checked), kept in IndexedDB until *Delete the model*; scoring runs locally |
 | Theme | system | — |
 | Emoji steganography (bit selectors, order, presentation selector, padding, carrier) | VS15 = 0, VS16 = 1, most significant bit first | — |
 | Right-click menu transforms | 12 common ones (plus any recipe or alphabet you add) | — |
@@ -423,6 +429,8 @@ src/core/agentview.js    Agent view (what agents read vs what people see), URL c
 src/core/canary.js · lab.js · score.js · datasets.js · hash.js   canaries, carrier corpus, answer scoring and
                          statistics, benchmark datasets
 src/core/targets.js      chat / Anthropic / Responses / HTTP-template targets with retries and usage
+src/core/ocr.js · ml.js · mlpack.js   OCR pack (faint-text differencing), ML second opinion (tokenizer +
+                         ONNX Runtime), the extension's model download; consent.js: Firefox data consent
 src/core/results.js · labels.js · resultsfmt.js · seedyaml.js   results files, human labels and agreement,
                          CSV / JUnit / SARIF, PyRIT seed YAML
 src/core/hftokenizer.js  Hugging Face tokenizer.json reader
@@ -455,7 +463,8 @@ action.yml               GitHub Action (composite: runs cli/injex.mjs)
 vendor/                  gpt-tokenizer encodings, node-qrcode, JsBarcode, ZXing (+ licenses)
 icons/  fonts/           logo and toolbar icons; Inter and JetBrains Mono (SIL OFL)
 assets/                  README banner and screenshots
-tools/                   sync-transforms.mjs (transform index), build-emoji-data.mjs (emoji list),
+tools/                   fetch-packs.mjs + build-plus.mjs (plus builds; pins in src/data/packs.json),
+                         sync-transforms.mjs (transform index), build-emoji-data.mjs (emoji list),
                          build-unicode-data.mjs (Unicode data), build-firefox.mjs + zip.mjs (Firefox package),
                          build-confusables.mjs, build-vscode.mjs (.vsix), build-mcpb.mjs (.mcpb, server.json),
                          build-injex-action.mjs (thin Marketplace action), hf-tokenizer-fixtures.py (test data)

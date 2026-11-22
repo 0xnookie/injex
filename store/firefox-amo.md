@@ -32,33 +32,33 @@ Reviewer notes:
 >     git clone https://github.com/0xnookie/injex && cd injex && git checkout v<version>
 >     node tools/build-firefox.mjs --zip injex-firefox.zip     # Node 20 or later, no npm install
 >
-> vendor/gpt-tokenizer/*.js are the unmodified browser bundles of the gpt-tokenizer npm package (MIT), used
-> offline for token counting: https://www.npmjs.com/package/gpt-tokenizer
+> vendor/gpt-tokenizer/*.js are the browser bundles (dist/*.js) of gpt-tokenizer 2.9.0 (MIT), used offline for
+> token counting, with only the trailing source-map comment removed:
+> https://cdn.jsdelivr.net/npm/gpt-tokenizer@2.9.0/dist/ — see vendor/gpt-tokenizer/README.md for a one-line check.
 
-**Before submitting:** write down the exact gpt-tokenizer version the files come from and link to its
-published files (for example `https://unpkg.com/gpt-tokenizer@<version>/dist/`), so the reviewer can diff
-them. The repository does not record the version yet.
+## Data collection declaration
 
-## Data collection declaration (decide before the next AMO upload)
+The Firefox build declares
 
-`tools/build-firefox.mjs` declares `"data_collection_permissions": { "required": ["none"] }`. Firefox's
-consent rules count any data an add-on sends outside the browser as transmission, and the optional AI tools
-send the text a user gives them to openrouter.ai. `"none"` is therefore probably not accurate for the AI
-tools. Options:
+    "data_collection_permissions": {
+      "required": ["none"],
+      "optional": ["personalCommunications", "websiteContent", "authenticationInfo"]
+    }
 
-1. Keep `required: ["none"]` and add an **optional** category for the AI tools (the closest fit for text a
-   person types is `personalCommunications`; `websiteContent` if page text is sent). Request it with
-   `browser.permissions.request({ data_collection: [...] })` from the click that saves the OpenRouter key,
-   and keep the AI tools off when it is declined. This keeps installation free of prompts.
-2. Ship the AMO build without the AI tab. Then `"none"` is accurate.
-
-Check the current wording of Mozilla's add-on policies (data disclosure section) and the Extension Workshop
-page on built-in data consent before choosing; the categories and rules were last read in a summarised form.
+injex collects nothing, and installing asks for nothing. The optional AI tools (AI tab, alphabet generation,
+*Test key*) send what the person types or pastes — which may be page content — and their own OpenRouter API key
+to openrouter.ai when they click. Firefox counts any data handled outside the add-on as transmission, and the
+implicit-consent rule covers single-purpose add-ons, which injex is not; so the first click on an AI tool calls
+`browser.permissions.request({ data_collection: [...] })` (src/core/consent.js) and the tool stays off when
+the person declines. *Load the full model list* sends no user data and is not gated. Workshop guidance: the
+"Firefox built-in data consent" page (required `["none"]` with optional categories; Firefox 140+, so the
+build's `strict_min_version` is 140.0). Re-read the Add-on Policies before each submission (Mozilla updates
+them on 1 December 2026).
 
 ## Firefox-specific notes
 
-- Minimum version: 128 (`strict_min_version` in the build), for MV3 scripting, storage.session,
-  Intl.Segmenter and CSS `color-mix`.
+- Minimum version: 140 (`strict_min_version` in the build): built-in data consent, plus MV3 scripting,
+  storage.session, Intl.Segmenter and CSS `color-mix`.
 - The Agent view works in Firefox; only its optional "Full accessibility tree…" button needs `debugger`,
   which Firefox does not offer to extensions. The build removes that optional permission and the button
   reports that it is unavailable.

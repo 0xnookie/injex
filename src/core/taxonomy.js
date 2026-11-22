@@ -62,6 +62,8 @@ const BY_KIND = {
   'doc-hidden': [...HIDDEN, ...INDIRECT],
   metadata: [...HIDDEN, ...INDIRECT],
   'doc-comment': [...HIDDEN, ...INDIRECT],
+  'image-faint': [...HIDDEN, ...INDIRECT, 'atlas:AML.T0051.001'],
+  'image-text': [...INDIRECT],
   unrendered: [...HIDDEN, ...INDIRECT],
   'ai-directive': [],
   exfil: ['owasp:llm02', 'atlas:AML.T0057', 'atlas:AML.T0086', 'nist:NISTAML.036', 'cwe:CWE-200'],

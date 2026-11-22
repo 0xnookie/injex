@@ -48,7 +48,7 @@ jobs:
           ZIP="injex-${VERSION}.zip"
           # only what the extension loads at runtime, plus the license (AGPL: ship it with the code)
           zip -r -9 "$ZIP" manifest.json LICENSE icons fonts src ui vendor \
-            -x '*/.DS_Store' '*/Thumbs.db'
+            -x '*/.DS_Store' '*/Thumbs.db' 'vendor/packs/*'
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
           unzip -l "$ZIP" | tail -3
 
@@ -60,6 +60,16 @@ jobs:
           node tools/build-firefox.mjs --zip "$FFZIP"
           echo "FFZIP=$FFZIP" >> "$GITHUB_ENV"
           unzip -l "$FFZIP" | tail -3
+
+      # the plus builds: the same extension with the OCR pack (Tesseract.js) and the ML runtime (ONNX Runtime
+      # Web), every file pinned by SHA-256 in src/data/packs.json; see tools/build-plus.mjs
+      - name: Package plus builds (OCR and ML packs)
+        run: |
+          node tools/fetch-packs.mjs
+          node tools/build-plus.mjs --zip
+          echo "PLUSZIP=injex-plus-${GITHUB_REF_NAME#v}.zip" >> "$GITHUB_ENV"
+          echo "PLUSFFZIP=injex-plus-firefox-${GITHUB_REF_NAME#v}.zip" >> "$GITHUB_ENV"
+          unzip -l "injex-plus-${GITHUB_REF_NAME#v}.zip" | tail -1
 
       # the MCP server as an MCP Bundle for Claude Desktop and other MCPB hosts: see tools/build-mcpb.mjs
       - name: Package MCP bundle
@@ -78,7 +88,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "$ZIP" "$FFZIP" "$MCPB" "$VSIX" \
+          gh release create "$GITHUB_REF_NAME" "$ZIP" "$FFZIP" "$PLUSZIP" "$PLUSFFZIP" "$MCPB" "$VSIX" \
             --title "injex $GITHUB_REF_NAME" \
             --generate-notes
 

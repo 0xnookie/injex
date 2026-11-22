@@ -2,6 +2,7 @@
 
 import { LETTERS, makeSpellingTransform, setCustomAlphabets, slug } from '../../src/core/registry.js';
 import { chat, alphabetPrompt } from '../../src/core/openrouter.js';
+import { aiConsent, AI_CONSENT_DECLINED } from '../../src/core/consent.js';
 import { $, h, row, mini, twoClick, empty, busy } from '../lib.js';
 
 let ctx;
@@ -53,6 +54,7 @@ async function generate() {
     msg('Add an OpenRouter key in Settings to generate alphabets.', true);
     return;
   }
+  if (!(await aiConsent())) return msg(AI_CONSENT_DECLINED, true);
   const btn = $('aGen');
   busy(btn, true);
   msg('Asking the model…');

@@ -1,6 +1,7 @@
 // AI tools over OpenRouter with the user's own key: PromptCraft rewrites, Anti-Classifier and translation.
 
 import { chat, MODEL_SUGGESTIONS, STRATEGIES, LANGUAGES, translatePrompt, TO_ENGLISH } from '../../src/core/openrouter.js';
+import { aiConsent, AI_CONSENT_DECLINED } from '../../src/core/consent.js';
 import { ANTICLASSIFIER_SYSTEM_PROMPT } from '../../src/data/anticlassifier-prompt.js';
 import { $, h, seg, empty, clip, mini, keepDraft, setValue, icon } from '../lib.js';
 
@@ -89,6 +90,8 @@ async function run() {
     keyBanner();
     return ctx.toast('Add your OpenRouter API key in Settings', true);
   }
+  // Firefox: asked once, while the click is being handled (before any other await)
+  if (!(await aiConsent())) return ctx.toast(AI_CONSENT_DECLINED, true);
   const m = mode.get();
   const out = $('iOut');
   out.textContent = '';

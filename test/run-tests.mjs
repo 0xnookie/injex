@@ -421,7 +421,7 @@ test('firefox: manifest is an event-page module with a gecko id and options_ui',
   assert.deepEqual(f.background, { scripts: [m.background.service_worker], type: 'module' });
   assert.equal(f.browser_specific_settings.gecko.id, GECKO_ID);
   assert.equal(f.browser_specific_settings.gecko.strict_min_version, MIN_FIREFOX);
-  assert.deepEqual(f.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
+  assert.deepEqual(f.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'], optional: ['personalCommunications', 'websiteContent', 'authenticationInfo'] });
   assert.deepEqual(f.options_ui, { page: m.options_page, open_in_tab: true });
   assert.ok(!f.options_page && !f.minimum_chrome_version && !f.background.service_worker);
   assert.deepEqual(f.permissions, m.permissions);
@@ -1076,7 +1076,7 @@ test('pre-commit: hooks manifest runs the injex bin', () => {
 
 // ── 1.4 modules (one file per area, same test() helper) ──
 
-for (const mod of ['./scanner-tests.mjs', './agent-tests.mjs', './mcp-audit-tests.mjs', './research-tests.mjs', './formats-tests.mjs', './interop-tests.mjs', './lab-tests.mjs', './agentview-tests.mjs', './proxy-tests.mjs', './tokenizer-tests.mjs', './publish-tests.mjs', './vscode-tests.mjs', './redteam-tests.mjs']) {
+for (const mod of ['./scanner-tests.mjs', './agent-tests.mjs', './mcp-audit-tests.mjs', './research-tests.mjs', './formats-tests.mjs', './interop-tests.mjs', './lab-tests.mjs', './agentview-tests.mjs', './proxy-tests.mjs', './tokenizer-tests.mjs', './publish-tests.mjs', './vscode-tests.mjs', './redteam-tests.mjs', './packs-tests.mjs']) {
   const { default: register } = await import(mod);
   await register({ test, assert, tagsOf, cli, CLI, FX, wf, rf, enc, join, mkdirSync, mkdtempSync, rmSync, tmpdir, spawnSync });
 }

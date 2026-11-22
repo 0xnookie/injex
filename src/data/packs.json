@@ -1,0 +1,77 @@
+{
+  "note": "Optional packs for the plus builds, fetched by tools/fetch-packs.mjs into vendor/packs/ (git-ignored). Hashes are SHA-256 of the exact bytes.",
+  "packs": {
+    "ocr": {
+      "title": "OCR pack: Tesseract.js 7.0.0, tesseract.js-core 7.0.0 (SIMD LSTM), English tessdata best_int",
+      "license": "Apache-2.0",
+      "files": [
+        {
+          "path": "tesseract.min.js",
+          "url": "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js",
+          "license": "Apache-2.0",
+          "sha256": "000c27d9cd0def655f77b36c72a389c0ab13793aa31cb4d7aab56d09c0afbc7e"
+        },
+        {
+          "path": "worker.min.js",
+          "url": "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js",
+          "license": "Apache-2.0",
+          "sha256": "576b7df7e3393e137e51849357c9adb53fe7ac1bb69bfa06cf3d61520f182c6d"
+        },
+        {
+          "path": "LICENSE-tesseract.js.md",
+          "url": "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/LICENSE.md",
+          "license": "Apache-2.0",
+          "sha256": "b40930bbcf80744c86c46a12bc9da056641d722716c378f5659b9e555ef833e1"
+        },
+        {
+          "path": "tesseract-core-simd-lstm.wasm.js",
+          "url": "https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/tesseract-core-simd-lstm.wasm.js",
+          "license": "Apache-2.0",
+          "sha256": "c58b46a4c796c0b8afccf77591d5b875b6896b45d402bbce8caa6f5362447b38"
+        },
+        {
+          "path": "LICENSE-tesseract.js-core",
+          "url": "https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0/LICENSE",
+          "license": "Apache-2.0",
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+        },
+        {
+          "path": "lang/eng.traineddata.gz",
+          "url": "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz",
+          "license": "Apache-2.0",
+          "sha256": "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91"
+        }
+      ]
+    },
+    "ml": {
+      "title": "ML pack: ONNX Runtime Web 1.31.1 (WASM, SIMD)",
+      "license": "MIT",
+      "files": [
+        {
+          "path": "ort.wasm.min.mjs",
+          "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort.wasm.min.mjs",
+          "license": "MIT",
+          "sha256": "c21d9c326d453a4a61398270c804d5979e118540597cb0c07f7b3d64e6098234"
+        },
+        {
+          "path": "ort-wasm-simd-threaded.mjs",
+          "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.mjs",
+          "license": "MIT",
+          "sha256": "30ed0b5cd1182ede931fea448afb567d4dc705ec957af09f108a2be5f770dac3"
+        },
+        {
+          "path": "ort-wasm-simd-threaded.wasm",
+          "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/ort-wasm-simd-threaded.wasm",
+          "license": "MIT",
+          "sha256": "4b884c203b0fa48d057be3332c65513ff85aa3c5bddd6946acc0fab7ecda001d"
+        },
+        {
+          "path": "LICENSE-onnxruntime",
+          "url": "https://cdn.jsdelivr.net/gh/microsoft/onnxruntime@v1.31.1/LICENSE",
+          "license": "MIT",
+          "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+        }
+      ]
+    }
+  }
+}

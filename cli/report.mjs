@@ -19,7 +19,8 @@ const one = (s, max) => safe(visualize(String(s ?? '').replace(/\s+/g, ' ').trim
 /** One-line description of a finding (`where` adds the place inside a document: "page 2"). */
 export function message(f, max = 120, { where = false } = {}) {
   const note = where && f.where ? `${f.note} (${safe(f.where)})` : f.note;
-  if (f.payload) return `${note}: “${one(f.payload, max)}”${f.instructions ? ' — reads like instructions to a model' : ''}`;
+  const ml = f.ml ? ` [ML ${f.ml.score.toFixed(2)}]` : '';
+  if (f.payload) return `${note}: “${one(f.payload, max)}”${f.instructions ? ' — reads like instructions to a model' : ''}${ml}`;
   const ctx = f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '';
   return ctx ? `${note} in “${safe(ctx.replace(/\s+/g, ' ').trim())}”` : note;
 }
@@ -76,7 +77,7 @@ export function formatText(result, { color = false, quiet = false } = {}) {
 
 export function formatJson(result, version) {
   const findings = result.files.flatMap(({ file, findings }) =>
-    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, ...(f.loc ? { location: f.loc, where: f.where } : {}), kind: f.kind, ...(f.rule ? { rule: f.rule } : {}), label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, ...(f.signals?.length ? { signals: f.signals } : {}), ...(f.exfil?.length ? { exfil: f.exfil } : {}), ...(f.agentFile ? { agentFile: true } : {}), count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '', tags: tagsForFinding(f) })),
+    findings.map((f) => ({ file, line: f.line, column: f.column, endColumn: f.endColumn, ...(f.loc ? { location: f.loc, where: f.where } : {}), kind: f.kind, ...(f.rule ? { rule: f.rule } : {}), label: KINDS[f.kind]?.label || f.kind, severity: f.severity, instructions: !!f.instructions, ...(f.signals?.length ? { signals: f.signals } : {}), ...(f.exfil?.length ? { exfil: f.exfil } : {}), ...(f.agentFile ? { agentFile: true } : {}), ...(f.ml ? { ml: f.ml } : {}), count: f.count, note: f.note, payload: f.payload || '', context: f.ctx ? `${f.ctx.before}⟦${f.ctx.match}⟧${f.ctx.after}` : '', tags: tagsForFinding(f) })),
   );
   return JSON.stringify({ tool: 'injex', version, scanned: result.scanned, skipped: result.skipped, failOn: result.failOn, failing: result.failing, summary: countBySeverity(findings), findings }, null, 2) + '\n';
 }
@@ -102,7 +103,7 @@ export function formatSarif(result, version) {
       level: LEVEL[f.severity] || 'warning',
       message: { text: `${KINDS[f.kind]?.label || f.kind} (${f.severity}): ${message(f, 300, { where: true })}` },
       locations: [{ physicalLocation: { artifactLocation: { uri: encodeURI(file), uriBaseId: '%SRCROOT%' }, region: { startLine: f.line, startColumn: f.column, endColumn: Math.max(f.endColumn || f.column + 1, f.column + 1) } } }],
-      properties: { severity: f.severity, instructions: !!f.instructions, count: f.count, ...(f.rule ? { rule: f.rule } : {}), ...(f.agentFile ? { agentFile: true } : {}), tags: tagsForFinding(f) },
+      properties: { severity: f.severity, instructions: !!f.instructions, count: f.count, ...(f.rule ? { rule: f.rule } : {}), ...(f.agentFile ? { agentFile: true } : {}), ...(f.ml ? { ml: f.ml } : {}), tags: tagsForFinding(f) },
     })),
   );
   return (

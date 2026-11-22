@@ -4,6 +4,7 @@ import * as store from '../src/core/store.js';
 import { list, CATEGORIES, CATEGORY_ORDER, setCustomAlphabets, setRecipes } from '../src/core/registry.js';
 import { STEG_DEFAULTS, CARRIERS, encodeEmojiBits } from '../src/core/stego.js';
 import { MODEL_SUGGESTIONS, keyInfo, listModels } from '../src/core/openrouter.js';
+import { aiConsent, AI_CONSENT_DECLINED } from '../src/core/consent.js';
 import { visualize } from '../src/core/scan.js';
 import { parseSites, matchPatterns, PASTE_SITES } from '../src/core/sites.js';
 import { $, h, debounce, matcher, twoClick, download } from './lib.js';
@@ -51,6 +52,7 @@ $('orShow').addEventListener('click', () => {
 $('orTest').addEventListener('click', async () => {
   const st = $('orStatus');
   if (!key.value.trim()) return (st.textContent = 'Enter a key first.');
+  if (!(await aiConsent())) return (st.textContent = AI_CONSENT_DECLINED);
   st.textContent = 'Checking…';
   st.style.color = '';
   try {
@@ -444,3 +446,33 @@ store.onChange((changes) => {
 renderAll();
 shortcuts();
 if (location.hash) document.querySelector(location.hash)?.scrollIntoView();
+
+// ── ML second opinion (plus builds) ──
+(async () => {
+  const P = await import('../src/core/mlpack.js');
+  if (!(await P.mlRuntimeAvailable())) return;
+  $('ml').hidden = false;
+  const status = $('mlStatus');
+  const show = async () => {
+    const s = await P.mlModelStatus();
+    $('mlGet').hidden = s.ready;
+    $('mlDel').hidden = !s.ready;
+    status.textContent = s.ready ? `Model ready (${(s.size / 1e6).toFixed(0)} MB, downloaded ${new Date(s.at).toLocaleDateString()})${s.kept === false ? ' — kept for this window only' : ''}` : '';
+  };
+  $('mlGet').addEventListener('click', async () => {
+    $('mlGet').disabled = true;
+    try {
+      await P.downloadModel(undefined, (t) => (status.textContent = t));
+      await show();
+    } catch (e) {
+      status.textContent = e.message || String(e);
+    } finally {
+      $('mlGet').disabled = false;
+    }
+  });
+  $('mlDel').addEventListener('click', async () => {
+    await P.deleteModel();
+    await show();
+  });
+  await show();
+})();

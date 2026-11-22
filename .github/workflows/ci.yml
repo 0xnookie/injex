@@ -65,6 +65,14 @@ jobs:
             console.log('Firefox manifest OK, min ' + m.browser_specific_settings.gecko.strict_min_version);
           "
 
+      - name: Plus builds (OCR and ML packs fetched and checked against their pinned hashes)
+        run: |
+          node tools/fetch-packs.mjs
+          node tools/build-plus.mjs
+          node tools/build-firefox.mjs
+          node -e "const m = require('./dist/plus/chrome/manifest.json'); if (!/wasm-unsafe-eval/.test(m.content_security_policy.extension_pages)) throw new Error('plus CSP'); if (require('fs').existsSync('dist/firefox/vendor/packs')) throw new Error('packs in the default build'); console.log('plus builds OK')"
+          node cli/injex.mjs ml status
+
       - name: Docker image builds and runs (CLI and MCP server)
         run: |
           docker build -t injex-ci .

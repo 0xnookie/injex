@@ -36,6 +36,10 @@ metadata; AI-agent configuration files are audited too (see injex audit).
   --no-docs           don't open documents       --no-git    walk folders instead of asking git
   --no-audit          skip the agent-configuration rules
   --quiet             only the summary line      --tag <t>   only findings with this taxonomy tag (repeatable)
+  --ml                the ML second opinion: an injection probability next to every finding that carries
+                      hidden text (severities stay as they are; needs injex ml fetch once)
+  --ml-model <m>      a pinned model id, or your own .onnx with --ml-tokenizer <tokenizer.json> and
+                      --ml-positive <label index meaning injection> (default 1)
 `,
   audit: `injex audit [paths…] — only the agent-configuration audit
 
@@ -179,7 +183,7 @@ output
 search and detectors
   --search best-of-n  random transform chains and templates per prompt until one succeeds
   --budget <n> (20)   -t, --transforms <k,k>   the chains to draw from
-  --target-type classifier --classifier injex|<url> --negatives <file>
+  --target-type classifier --classifier injex|ml[:<model>]|<url> --negatives <file>
                       a detector's recall at fixed false-positive rates instead of a chat model
 `,
   report: `injex report <results.jsonl…> — a Markdown report (bug bounty, paper appendix)
@@ -224,6 +228,19 @@ human one; Krippendorff's alpha between raters when answers were labelled more t
 
   --labels <file>     (default: <results>.labels.jsonl; repeatable)
   --partial           count partial as success              --json   machine-readable
+`,
+  ml: `injex ml status|fetch|score — the optional ML second opinion (a prompt-injection classifier)
+
+Nothing is downloaded until you run injex ml fetch: ONNX Runtime Web (unless the repository has
+vendor/packs/ml) and the model go into $INJEX_CACHE (default %LOCALAPPDATA%\\injex or ~/.cache/injex), every
+file checked against its pinned SHA-256. The default model is ProtectAI deberta-v3-base-prompt-injection-v2
+(Apache-2.0, 747 MB).
+
+injex ml status                     what is there
+injex ml fetch [--model id]         download the runtime and the model
+injex ml score [text] [--json]      the injection probability of a text (long texts are read in windows)
+  --model <id|file.onnx> --tokenizer <tokenizer.json> --positive <n>   your own sequence-classification export
+Use it from injex scan --ml and injex run --target-type classifier --classifier ml.
 `,
   mcp: `injex mcp — an MCP server on stdio: scan / clean / decode / encode / inspect / compare tools
 

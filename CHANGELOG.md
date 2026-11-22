@@ -5,6 +5,32 @@ All notable changes to **injex** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] — 2026-11-22
+
+### Added
+- **Plus builds** (`injex-plus-<version>.zip`, `injex-plus-firefox-<version>.zip`): the extension with two
+  optional packs, every file pinned by SHA-256 in `src/data/packs.json` and fetched at build time
+  (`node tools/fetch-packs.mjs && node tools/build-plus.mjs`). Their manifest allows WebAssembly; the default
+  builds are unchanged and carry neither pack.
+- **OCR pack** (Tesseract.js 7, bundled — never loaded from a CDN): *Scan → File* reads the text in an image
+  and in the images on a PDF's pages (JPEG, 8-bit and 1-bit scans), the *Agent view* reads its screenshot.
+  New findings: **faint text** (a colour barely different from the background, found by reading a
+  contrast-enhanced copy in which only near-background pixels turn black) and **text only an image shows**
+  (a canvas, a picture, a scanned page) when it reads like instructions.
+- **ML second opinion**: a prompt-injection classifier (ProtectAI deberta-v3-base-prompt-injection-v2,
+  Apache-2.0, pinned revision and SHA-256) run with ONNX Runtime Web and injex's own tokenizer.json reader;
+  long texts are read in overlapping windows. It scores findings next to their severity, never instead of
+  it. Extension (plus builds): *Settings → ML second opinion → Download the model*, then *ML second opinion*
+  in the Scan tab. CLI: `injex ml status | fetch | score`, `injex scan --ml`, and
+  `injex run --target-type classifier --classifier ml` for its recall at a fixed false-positive rate; your own
+  ONNX export with `--ml-model` / `--ml-tokenizer`.
+- **Firefox data consent**: the Firefox build declares `required: ["none"]` with the AI tools' data as
+  optional categories and asks for them the first time an AI tool is used; minimum Firefox 140.
+- `vendor/gpt-tokenizer/README.md` records the vendored release (gpt-tokenizer 2.9.0) and how to check it.
+
+### Fixed
+- The README counted 17 tabs; there are 18 since the Results tab.
+
 ## [1.4.0] — 2026-11-22
 
 ### Added

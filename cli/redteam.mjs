@@ -184,7 +184,16 @@ export async function cmdRun(argv, { parseArgs, fail, stdin, safe, VERSION }) {
   if (o['target-type'] === 'classifier') {
     const negatives = o.negatives ? readFileSync(o.negatives, 'utf8').split(/\r?\n/).filter((l) => l.trim()) : [];
     let detect;
-    if (o.classifier === 'injex') {
+    if (o.classifier === 'ml' || o.classifier.startsWith('ml:')) {
+      const { loadClassifier } = await import('./ml.mjs');
+      let c;
+      try {
+        c = await loadClassifier({ model: o.classifier.slice(3) || undefined });
+      } catch (e) {
+        fail(e.message);
+      }
+      detect = async (t) => (await c.classify(t)).score;
+    } else if (o.classifier === 'injex') {
       const { scanText } = await import('../src/core/scan.js');
       const { instructionSignals } = await import('../src/core/instructions.js');
       const W = { critical: 1, high: 0.9, medium: 0.6, low: 0.3, info: 0.1 };

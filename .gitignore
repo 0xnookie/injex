@@ -17,3 +17,6 @@ __pycache__/
 
 # test fixtures for the agent-configuration audit (deliberately unsafe editor settings)
 !test/fixtures/agent-config/.vscode/
+
+# optional packs (tools/fetch-packs.mjs)
+vendor/packs/
