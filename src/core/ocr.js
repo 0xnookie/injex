@@ -11,6 +11,7 @@
 // The pixel maths and the comparison are pure functions (tested in Node); recognising needs a DOM.
 
 import { looksLikeInstructions } from './scan.js';
+import { packsAllowed } from './packs.js';
 
 const PACK_DIR = 'vendor/packs/ocr/';
 
@@ -26,6 +27,7 @@ export function ocrBase() {
 
 /** Whether this build has the OCR pack. */
 export async function ocrAvailable() {
+  if (!packsAllowed()) return false;
   try {
     const r = await fetch(ocrBase() + 'tesseract.min.js', { method: 'HEAD' });
     return r.ok;

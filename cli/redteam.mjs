@@ -192,7 +192,9 @@ export async function cmdRun(argv, { parseArgs, fail, stdin, safe, VERSION }) {
       } catch (e) {
         fail(e.message);
       }
-      detect = async (t) => (await c.classify(t)).score;
+      // unrounded: a confident model's scores cluster at 0.9999…, and recall at a low false-positive rate
+      // needs them ranked, not tied at 1
+      detect = async (t) => (await c.classify(t)).probability;
     } else if (o.classifier === 'injex') {
       const { scanText } = await import('../src/core/scan.js');
       const { instructionSignals } = await import('../src/core/instructions.js');

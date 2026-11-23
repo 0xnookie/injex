@@ -7,13 +7,13 @@
     "url": "https://github.com/0xnookie/injex",
     "source": "github"
   },
-  "version": "1.5.0",
+  "version": "1.5.1",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@0xnookie/injex",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "transport": {
         "type": "stdio"
       },
@@ -26,8 +26,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/0xnookie/injex/releases/download/v1.5.0/injex-mcp-1.5.0.mcpb",
-      "fileSha256": "4b30ea8c8e0a2320c9f2d8df54ca8222666ef4d42738ba56dc8aebc2da69a5be",
+      "identifier": "https://github.com/0xnookie/injex/releases/download/v1.5.1/injex-mcp-1.5.1.mcpb",
+      "fileSha256": "41ea32683dc98042920fc9985efd4cf27a40808d8f36e5c0c18ffc665e385e7a",
       "transport": {
         "type": "stdio"
       }

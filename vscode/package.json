@@ -2,7 +2,7 @@
   "name": "injex",
   "displayName": "injex — hidden text & prompt injection",
   "description": "Find, decode and remove hidden text in your files: invisible Unicode, tag-character and emoji steganography, look-alike letters, hidden instructions in comments, PDFs and Word files, and risky AI-agent configuration.",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "publisher": "0xnookie",
   "license": "AGPL-3.0-or-later",
   "icon": "icon.png",

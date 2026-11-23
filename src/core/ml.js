@@ -92,7 +92,9 @@ const softmax = (xs) => {
 /**
  * A classifier. o: { ort (the onnxruntime-web module), model (bytes), tokenizer (tokenizer.json text),
  * labels, positive (label index meaning injection), maxLength, name }.
- * → { name, classify(text) → { score, label, windows } }
+ * → { name, classify(text) → { score, probability, label, windows } }
+ * score is rounded for display; rank and threshold on probability (a confident model puts benign and
+ * malicious texts alike at 0.9999…, which rounding would make ties).
  */
 export async function createClassifier(o) {
   const tok = loadHfTokenizer(o.tokenizer, o.name || 'tokenizer.json');
@@ -132,7 +134,7 @@ export async function createClassifier(o) {
         if (!best || p[positive] > best[positive]) best = p;
       }
       const label = best.indexOf(Math.max(...best));
-      return { score: Math.round(best[positive] * 10000) / 10000, label: labels[label] ?? String(label), windows: ws.length };
+      return { score: Math.round(best[positive] * 10000) / 10000, probability: best[positive], label: labels[label] ?? String(label), windows: ws.length };
     },
   };
 }

@@ -2,7 +2,9 @@
 
 How well injex's deterministic checks find hidden prompt injection, and how often they fire on benign
 text. Everything here is reproducible with `node bench/run.mjs` (dev-only: the `bench/` folder ships in
-neither the extension nor the npm package). Numbers below are from injex 1.4.0, 2026-11-21.
+neither the extension nor the npm package). Numbers below are from injex 1.5.1, 2026-11-23: Tracks A, B
+and C rerun (A and C give the same results as in 1.4.0; B now includes the ML second opinion), Track D from
+1.4.0.
 
 ## Track A — hidden carriers and false positives (offline, gated in CI)
 
@@ -25,15 +27,15 @@ calendar invitations, MCP tool manifests, tool output, and PDF / Word documents.
 | **Total** | **49** | **49 (100 %)** |
 
 One more carrier — text covered by an element drawn on top of it — needs a rendered page: the extension's
-page scanner detects it (all 24 web carriers are detected at high or critical severity by the in-browser
-collector; checked in headless Chrome).
+page scanner detects it. All 24 web carriers are detected by the in-browser collector in a rendered page,
+checked on every push in headless Chrome on Linux and Windows (`test/e2e/chrome.mjs`).
 
 **False positives** at medium severity or above:
 
 | Benign set | Documents | Flagged | Per 1,000 |
 |---|---:|---:|---:|
 | Synthetic multilingual mix (Persian / Hindi joiners, Arabic / Hebrew direction marks, emoji ZWJ sequences, flags and keycaps, Russian, Greek, Chinese, Japanese, math letters, code) | 1,000 | 0 | 0 |
-| This repository's own source and docs | 65 | 0 | 0 |
+| This repository's own source and docs | 124 | 0 | 0 |
 
 `node bench/run.mjs --check` fails when recall drops or false positives rise against `bench/baseline.json`.
 
@@ -41,32 +43,52 @@ collector; checked in headless Chrome).
 catch every technique in the wild. The benign sets are small and partly synthetic; a larger crawl-based
 negative set is the next step.
 
-## Track B — the instruction heuristic on labelled datasets (`--track b --fetch`)
+## Track B — the instruction heuristic and the ML second opinion on labelled datasets (`--track b --fetch [--ml]`)
 
-Does a text *read like instructions to a model*? This is the keyword-and-pattern heuristic that decides
-whether hidden text is reported as an injection — not a classifier, and it runs on visible text here,
-which is harder than its real job (judging text that is already known to be hidden). 300 rows per dataset
-from the Hugging Face datasets-server (current revision).
+Does a text *read like instructions to a model*? The heuristic is the keyword-and-pattern check that decides
+whether hidden text is reported as an injection — not a classifier, and it runs on visible text here, which
+is harder than its real job (judging text that is already known to be hidden). The ML second opinion is the
+plus builds' classifier (ProtectAI deberta-v3-base-prompt-injection-v2, pinned revision, `injex ml`), run on
+the same rows. 300 rows per dataset from the Hugging Face datasets-server (current revision).
 
-| Dataset | Rows | Injections | Injections flagged | Benign flagged |
-|---|---:|---:|---:|---:|
-| deepset/prompt-injections | 300 | 54 | 17 | 0 |
-| Lakera/gandalf_ignore_instructions | 300 | 300 | 177 | — |
-| leolee99/NotInject (benign, full of trigger words) | 113 | 0 | — | **0** |
-| jackhhao/jailbreak-classification | 300 | 137 | 78 | 8 |
+| Dataset | Rows | Injections | Flagged by the heuristic | Flagged by ML (≥ 0.5) | Benign flagged: heuristic / ML |
+|---|---:|---:|---:|---:|---:|
+| deepset/prompt-injections | 300 | 54 | 17 | 21 | 0 / 1 |
+| Lakera/gandalf_ignore_instructions | 300 | 300 | 177 | 300 | — |
+| leolee99/NotInject (benign, full of trigger words) | 113 | 0 | — | — | **0 / 25** |
+| jackhhao/jailbreak-classification ¹ | 300 | 137 | 78 | 106 | 8 / 0 |
 
-True-positive rate at a fixed false-positive rate (all four sets together, 491 injections, 522 benign):
+True-positive rate at a fixed false-positive rate, all four sets together (491 injections, 522 benign):
 
-| FPR target | Threshold | TPR | Measured FPR |
-|---:|---:|---:|---:|
-| 0.1 % | 0.65 | 9.6 % | 0 % |
-| 1 % | 0.50 | 46.8 % | 0.96 % |
-| 5 % | 0.30 | 55.4 % | 1.5 % |
+| FPR target | Heuristic: threshold | TPR | Measured FPR | ML: threshold | TPR | Measured FPR |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.1 % | 0.65 | 9.6 % | 0 % | 0.999999 | 59.7 % | 0 % |
+| 1 % | 0.50 | 46.8 % | 0.96 % | 0.99997 | 77.2 % | 0.96 % |
+| 5 % | 0.30 | 55.4 % | 1.5 % | 0.29 | 87.4 % | 5.0 % |
 
-Read this as: the heuristic is conservative — it almost never fires on benign text (NotInject: 0 of 113),
-and it misses paraphrased or non-English injections that don't use the classic phrasings. That is the
-intended trade-off for a check that runs on every page and paste; an optional ML second opinion is on the
-roadmap for the cases it misses.
+Without the dataset the model was trained on (¹ — its model card names it; 354 injections, 359 benign):
+
+| FPR target | Heuristic TPR | ML TPR (threshold) |
+|---:|---:|---:|
+| 0.1 % | 54.8 % | 76.3 % (0.999999) |
+| 1 % | 55.4 % | 84.7 % (0.99999) |
+| 5 % | 55.4 % | 89.8 % (0.98) |
+
+Read this as:
+
+- **The heuristic is conservative.** It almost never fires on benign text (NotInject: 0 of 113) and misses
+  paraphrased or non-English injections that don't use the classic phrasings. That is the intended
+  trade-off for a check that runs on every page and paste.
+- **The classifier catches far more — and over-fires on trigger words.** It finds every Gandalf injection
+  but flags 25 of NotInject's 113 benign prompts at its own 0.5 threshold. Its useful thresholds sit at
+  0.9999…: benign and malicious texts alike get scores near 1, so the ranking happens in the last decimals
+  (`classify()` returns the unrounded `probability` for that; the displayed `score` is rounded).
+- **That is why it is a second opinion.** In injex it scores findings next to their severity and never
+  replaces it. A finding needs hidden text first; the classifier then says how much the hidden text reads
+  like an injection.
+- **Caveats.** The model card names one training dataset by name (¹) and others only by licence, so Gandalf or
+  deepset may be in its training data as well; the held-out table is a best effort, not a clean test. The
+  model is English-only by design (deepset has German rows). Scoring took 0.5 s per row on one CPU thread.
 
 ## Track C — obfuscation robustness (offline)
 
@@ -136,5 +158,6 @@ node bench/run.mjs                      # track A (offline)
 node bench/run.mjs --check              # against bench/baseline.json, as CI does
 node bench/run.mjs --track c            # track C (offline)
 node bench/run.mjs --track b --fetch    # track B (downloads public datasets)
+node bench/run.mjs --track b --fetch --limit 300 --ml   # with the ML second opinion (injex ml fetch first)
 node cli/injex.mjs lab ./lab            # the carrier corpus itself, with a manifest
 ```

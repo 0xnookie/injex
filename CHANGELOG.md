@@ -5,6 +5,38 @@ All notable changes to **injex** are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] — 2026-11-23
+
+### Fixed
+- The default builds no longer ask for the OCR and ML pack files they don't carry: the dashboard and the
+  settings page logged two "file not found" errors each time they opened. Whether a build can run the packs
+  now comes from its manifest (only the plus builds allow WebAssembly); the plus builds work as before.
+- `injex run --target-type classifier --classifier ml` ranked the ML second opinion on its rounded score.
+  The model puts benign and malicious texts alike at 0.9999…, so many tied at 1 and recall at 0.1 % or 1 %
+  false positives came out as 0. It now ranks on the unrounded probability (`classify()` returns it next to
+  the rounded `score`, and `injex ml score --json` shows it).
+- The README called OpenRouter the only feature that uses the network; the plus builds' one-time model
+  download is the other.
+- The CHANGELOG links for 1.0.0, 1.1.0 and 1.3.0 pointed to tags that don't exist; they now point to the
+  release commits.
+
+### Added
+- **A browser test in CI** (`test/e2e/chrome.mjs`): loads the extension into headless Chrome on Linux and
+  Windows, opens the popup, the settings page and every dashboard tab and fails on any error, runs the page
+  scanner on every `injex lab` web carrier in a rendered page (24 of 24, including covered text and shadow
+  DOM, which only a browser shows) and checks that a plain page with Persian text, family emoji and a tag
+  flag stays quiet. Runs locally too; without Chrome it skips.
+- **CI on every Node.js line in use**: the unit tests and the benchmark gate on Node 20 (still the engines
+  minimum), 22, 24 and 26 on Linux, and on 22 and 26 on Windows. The Python bridge's tests run on Python 3.11
+  and the latest 3.x.
+- `node bench/run.mjs --track b --fetch --ml` scores the same rows with the ML second opinion, with the
+  dataset the model was trained on reported separately. In `BENCHMARKS.md`: at 1 % false positives the
+  classifier finds 77 % of the injections (the heuristic 47 %), but at its own 0.5 threshold it flags 25 of
+  NotInject's 113 benign prompts (the heuristic none). That is why it is a second opinion and never a gate.
+
+### Changed
+- The release and build jobs run on Node 24 (Node 20 reached end of life in April 2026).
+
 ## [1.5.0] — 2026-11-22
 
 ### Added
@@ -249,7 +281,10 @@ dashboard and a right-click menu.
   context-menu transform picker, history, keyboard shortcuts, backup / restore.
 - Node test suite (`node test/run-tests.mjs`) and CI.
 
-[1.3.0]: https://github.com/0xnookie/injex/releases/tag/v1.3.0
+[1.5.1]: https://github.com/0xnookie/injex/releases/tag/v1.5.1
+[1.5.0]: https://github.com/0xnookie/injex/releases/tag/v1.5.0
+[1.4.0]: https://github.com/0xnookie/injex/releases/tag/v1.4.0
+[1.3.0]: https://github.com/0xnookie/injex/tree/28cf6cdf2abe7b6359f6750e852bd9b54bfeda52
 [1.2.0]: https://github.com/0xnookie/injex/releases/tag/v1.2.0
-[1.1.0]: https://github.com/0xnookie/injex/releases/tag/v1.1.0
-[1.0.0]: https://github.com/0xnookie/injex/releases/tag/v1.0.0
+[1.1.0]: https://github.com/0xnookie/injex/tree/536a51609d42cad4d650ca0ea7b1f61fe6aaa740
+[1.0.0]: https://github.com/0xnookie/injex/tree/2666af055b977bec5181c850dfdd044b3bac8dc4

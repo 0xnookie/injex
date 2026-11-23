@@ -16,6 +16,7 @@ import { downloadModel, mlModelStatus, deleteModel } from '../src/core/mlpack.js
 import { plusManifest, PLUS_CSP, PLUS_GECKO_ID } from '../tools/build-plus.mjs';
 import { firefoxManifest, copyShip } from '../tools/build-firefox.mjs';
 import { aiConsent, AI_DATA } from '../src/core/consent.js';
+import { packsAllowed } from '../src/core/packs.js';
 
 /** A PDF from objects (strings or Buffers), with a correct xref table. */
 function pdf(objs) {
@@ -190,6 +191,9 @@ export default async function register({ test, assert }) {
     assert.equal(bad.label, 'INJECTION');
     assert.ok(bad.score > 0.99);
     assert.ok(good.score < 0.01);
+    // probability is not rounded (ranking at a low false-positive rate needs it); score is, for display
+    assert.ok(Math.abs(bad.probability - 1 / (1 + Math.exp(-5))) < 1e-9);
+    assert.equal(bad.score, Math.round(bad.probability * 10000) / 10000);
     assert.deepEqual(sent[0], { ids: [0, 3, 4, 5, 1], mask: [1, 1, 1, 1, 1], type: 'int64' });
     assert.ok(long.windows > 1 && long.score > 0.99, 'an injection at the end of a long text is found');
     assert.match(unknownInput, /pixel_values/);
@@ -207,7 +211,7 @@ export default async function register({ test, assert }) {
     assert.equal(afterDelete.ready, false);
   });
 
-  test('plus builds: CSP allows WebAssembly, own name and gecko id; default copies leave the packs out', () => {
+  test('plus builds: CSP allows WebAssembly, own name and gecko id; default copies leave the packs out and skip the pack check', () => {
     const m = JSON.parse(readFileSync(new URL('../manifest.json', import.meta.url), 'utf8'));
     const p = plusManifest(m);
     assert.equal(p.content_security_policy.extension_pages, PLUS_CSP);
@@ -216,6 +220,12 @@ export default async function register({ test, assert }) {
     assert.ok(p.description.length <= 132);
     assert.equal(m.content_security_policy, undefined, 'the default manifest keeps the default CSP');
     assert.equal(firefoxManifest(p, { id: PLUS_GECKO_ID }).browser_specific_settings.gecko.id, 'injex-plus@0xnookie');
+    // the default builds don't ask for pack files they can't have (Chrome logs the 404 as an error)
+    assert.equal(packsAllowed(m), false);
+    assert.equal(packsAllowed(firefoxManifest(m)), false);
+    assert.equal(packsAllowed(p), true);
+    assert.equal(packsAllowed(firefoxManifest(p, { id: PLUS_GECKO_ID })), true);
+    assert.equal(packsAllowed(), true, 'outside an extension the file decides');
     const tmp = mkdtempSync(join(tmpdir(), 'injex-ship-'));
     try {
       copyShip(join(tmp, 'a'));

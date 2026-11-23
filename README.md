@@ -53,7 +53,7 @@ Language models read text differently from people. A Unicode tag character is in
 - **Runs experiments.** `injex lab` builds a corpus of carriers hiding a canary (web, Markdown, agent files, e-mail, calendar, MCP manifests, tool output, PDF, Word) and serves it — as web pages or as a mock MCP server — logging what comes back; `injex run` sends rows to a chat API, the Anthropic or Responses API, any HTTP endpoint or a local agent command (attachments, scripted turns, tools) and scores the answers, refuse-then-comply included, with confidence intervals; `injex review` and the *Results* tab collect human labels, `injex judge-eval` measures how well each automatic score agrees with them, and `injex results` exports CSV, JUnit and SARIF for CI. A Python bridge plugs injex into garak, PyRIT, Spikee, DeepTeam, AgentDojo and StrongREJECT. Numbers in [BENCHMARKS.md](BENCHMARKS.md).
 - **Reads images, optionally.** The *plus* builds add an OCR pack (Tesseract.js, bundled — no CDN): text that only an image, a canvas or a scanned PDF page shows, and **faint text** in a colour barely different from the background, found by reading a contrast-enhanced copy. They also carry ONNX Runtime for an **ML second opinion**: a prompt-injection classifier you download once (747 MB) scores what the scanner finds, next to its severity — in the extension and with `injex scan --ml`.
 - **In your editor.** The VS Code / Open VSX extension shows hidden text as problems while you type, decodes it inline and on hover, and removes it with a quick fix.
-- **Bring your own model.** PromptCraft rewrites, Anti-Classifier and translation (including dead and constructed languages) through OpenRouter with your key — the only feature that touches the network.
+- **Bring your own model.** PromptCraft rewrites, Anti-Classifier and translation (including dead and constructed languages) through OpenRouter with your key — together with the plus builds' one-time model download, the only network use (see [Settings & network activity](#️-settings--network-activity)).
 - **Private.** No telemetry, no remote code, no host permissions: page access only happens through `activeTab`, when you click — unless you switch on Live scan or the paste guard, which ask for it.
 
 ---
@@ -193,7 +193,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: 0xnookie/injex@v1.5.0
+      - uses: 0xnookie/injex@v1.5.1
         with:
           path: .                 # files or folders, space- or newline-separated
           fail-on: high           # critical | high | medium | low | none
@@ -204,7 +204,7 @@ jobs:
 For GitHub code scanning, write SARIF and upload it (`permissions: security-events: write`):
 
 ```yaml
-      - uses: 0xnookie/injex@v1.5.0
+      - uses: 0xnookie/injex@v1.5.1
         with:
           fail-on: none
           sarif: injex.sarif
@@ -221,7 +221,7 @@ The action's outputs `findings` and `failing` count what was reported. With `sca
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/0xnookie/injex
-    rev: v1.5.0
+    rev: v1.5.1
     hooks:
       - id: injex          # fail the commit on hidden text (high and up), PDFs and Word files included
       # - id: injex-clean  # or strip hidden characters from staged text files

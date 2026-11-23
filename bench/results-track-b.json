@@ -6,28 +6,36 @@
       "rows": 300,
       "positives": 54,
       "flaggedPositives": 17,
-      "flaggedNegatives": 0
+      "flaggedNegatives": 0,
+      "mlFlaggedPositives": 21,
+      "mlFlaggedNegatives": 1
     },
     {
       "dataset": "gandalf",
       "rows": 300,
       "positives": 300,
       "flaggedPositives": 177,
-      "flaggedNegatives": 0
+      "flaggedNegatives": 0,
+      "mlFlaggedPositives": 300,
+      "mlFlaggedNegatives": 0
     },
     {
       "dataset": "notinject",
       "rows": 113,
       "positives": 0,
       "flaggedPositives": 0,
-      "flaggedNegatives": 0
+      "flaggedNegatives": 0,
+      "mlFlaggedPositives": 0,
+      "mlFlaggedNegatives": 25
     },
     {
       "dataset": "jailbreak-classification",
       "rows": 300,
       "positives": 137,
       "flaggedPositives": 78,
-      "flaggedNegatives": 8
+      "flaggedNegatives": 8,
+      "mlFlaggedPositives": 106,
+      "mlFlaggedNegatives": 0
     }
   ],
   "recallAtFpr": [
@@ -56,5 +64,90 @@
       "negatives": 522
     }
   ],
-  "note": "datasets-server serves the current revision of each dataset; numbers can shift when a dataset is updated"
+  "note": "datasets-server serves the current revision of each dataset; numbers can shift when a dataset is updated",
+  "ml": {
+    "model": "protectai-v2",
+    "trainedOn": [
+      "jailbreak-classification"
+    ],
+    "recallAtFpr": [
+      {
+        "fpr": 0.001,
+        "threshold": 0.9999994127533214,
+        "tpr": 0.597,
+        "measured_fpr": 0,
+        "positives": 491,
+        "negatives": 522
+      },
+      {
+        "fpr": 0.01,
+        "threshold": 0.9999738526944192,
+        "tpr": 0.772,
+        "measured_fpr": 0.0096,
+        "positives": 491,
+        "negatives": 522
+      },
+      {
+        "fpr": 0.05,
+        "threshold": 0.2878409793278195,
+        "tpr": 0.874,
+        "measured_fpr": 0.0498,
+        "positives": 491,
+        "negatives": 522
+      }
+    ],
+    "recallAtFprHeldOut": [
+      {
+        "fpr": 0.001,
+        "threshold": 0.9999994127533214,
+        "tpr": 0.763,
+        "measured_fpr": 0,
+        "positives": 354,
+        "negatives": 359
+      },
+      {
+        "fpr": 0.01,
+        "threshold": 0.9999942076690588,
+        "tpr": 0.847,
+        "measured_fpr": 0.0084,
+        "positives": 354,
+        "negatives": 359
+      },
+      {
+        "fpr": 0.05,
+        "threshold": 0.9805867390531834,
+        "tpr": 0.898,
+        "measured_fpr": 0.0474,
+        "positives": 354,
+        "negatives": 359
+      }
+    ],
+    "heuristicRecallAtFprHeldOut": [
+      {
+        "fpr": 0.001,
+        "threshold": 0.3,
+        "tpr": 0.548,
+        "measured_fpr": 0,
+        "positives": 354,
+        "negatives": 359
+      },
+      {
+        "fpr": 0.01,
+        "threshold": 0,
+        "tpr": 0.554,
+        "measured_fpr": 0.0056,
+        "positives": 354,
+        "negatives": 359
+      },
+      {
+        "fpr": 0.05,
+        "threshold": 0,
+        "tpr": 0.554,
+        "measured_fpr": 0.0056,
+        "positives": 354,
+        "negatives": 359
+      }
+    ],
+    "secondsPerRow": 0.51
+  }
 }

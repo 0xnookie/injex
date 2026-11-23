@@ -4,6 +4,7 @@
 
 import { ML_MODELS, DEFAULT_MODEL, hfUrl, createClassifier, scoreFindings } from './ml.js';
 import { getFile, putFile, deleteFile } from './store.js';
+import { packsAllowed } from './packs.js';
 
 const PACK_DIR = 'vendor/packs/ml/';
 const base = () => (globalThis.chrome?.runtime?.getURL ? chrome.runtime.getURL(PACK_DIR) : new URL('../../' + PACK_DIR, import.meta.url).href);
@@ -11,6 +12,7 @@ const key = (id, part) => `ml:${id}${part ? ':' + part : ''}`;
 
 /** Whether this build has the ML runtime. */
 export async function mlRuntimeAvailable() {
+  if (!packsAllowed()) return false;
   try {
     return (await fetch(base() + 'ort.wasm.min.mjs', { method: 'HEAD' })).ok;
   } catch {

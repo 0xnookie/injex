@@ -13,7 +13,9 @@
 //   node bench/run.mjs --check         track A, compare with the baseline (exit 1 on regression)
 //   node bench/run.mjs --update        track A, write the baseline
 //   node bench/run.mjs --track c       track C (offline)
-//   node bench/run.mjs --track b --fetch [--limit 500]
+//   node bench/run.mjs --track b --fetch [--limit 500] [--ml [--ml-model id|file.onnx --ml-tokenizer file]]
+//      --ml also scores every row with the ML second opinion (injex ml fetch first) — slow: one model pass
+//      per 512-token window, single-threaded
 
 import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,7 +33,11 @@ import { syntheticNegatives, repoNegatives } from './corpus.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const BASELINE = join(ROOT, 'bench', 'baseline.json');
-const { values: o } = parseArgs({ options: { track: { type: 'string', default: 'a' }, check: { type: 'boolean', default: false }, update: { type: 'boolean', default: false }, fetch: { type: 'boolean', default: false }, limit: { type: 'string', default: '500' }, json: { type: 'boolean', default: false } } });
+const { values: o } = parseArgs({ options: { track: { type: 'string', default: 'a' }, check: { type: 'boolean', default: false }, update: { type: 'boolean', default: false }, fetch: { type: 'boolean', default: false }, limit: { type: 'string', default: '500' }, json: { type: 'boolean', default: false }, ml: { type: 'boolean', default: false }, 'ml-model': { type: 'string' }, 'ml-tokenizer': { type: 'string' } } });
+
+// datasets a pinned model's card names as training data: its numbers on them are not a held-out test
+// (protectai-v2: model card at the pinned revision, "Dataset" section)
+const ML_TRAINED_ON = { 'protectai-v2': ['jailbreak-classification'] };
 
 const atLeast = (sev, min) => SEVERITY_ORDER[sev] <= SEVERITY_ORDER[min];
 
@@ -148,7 +154,37 @@ async function trackB() {
     out.push({ dataset: name, rows: items.length, positives: items.filter((x) => x.label).length, items });
   }
   const all = out.flatMap((d) => d.items.map((x) => ({ label: x.label ? 1 : 0, score: instructionSignals(x.text).score })));
-  return { track: 'B', datasets: out.map(({ items, ...d }) => ({ ...d, flaggedPositives: items.filter((x) => x.label && instructionSignals(x.text).instructions).length, flaggedNegatives: items.filter((x) => !x.label && instructionSignals(x.text).instructions).length })), recallAtFpr: recallAtFpr(all), note: 'datasets-server serves the current revision of each dataset; numbers can shift when a dataset is updated' };
+  const result = { track: 'B', datasets: out.map(({ items, ...d }) => ({ ...d, flaggedPositives: items.filter((x) => x.label && instructionSignals(x.text).instructions).length, flaggedNegatives: items.filter((x) => !x.label && instructionSignals(x.text).instructions).length })), recallAtFpr: recallAtFpr(all), note: 'datasets-server serves the current revision of each dataset; numbers can shift when a dataset is updated' };
+  if (o.ml) result.ml = await mlTrackB(out, result.datasets);
+  return result;
+}
+
+/** The ML second opinion on the same rows: flagged at its own 0.5 threshold, and TPR at fixed FPR. */
+async function mlTrackB(out, datasets) {
+  const { loadClassifier } = await import('../cli/ml.mjs');
+  const c = await loadClassifier({ model: o['ml-model'], tokenizer: o['ml-tokenizer'] });
+  const total = out.reduce((n, d) => n + d.items.length, 0);
+  const started = Date.now();
+  let done = 0;
+  for (const d of out)
+    for (const x of d.items) {
+      x.ml = (await c.classify(x.text)).probability; // unrounded, so near-1 scores still rank
+      if (++done % 50 === 0) process.stderr.write(`bench: ML ${done}/${total} rows, ${Math.round((Date.now() - started) / 1000)} s\n`);
+    }
+  for (const [i, d] of out.entries()) {
+    datasets[i].mlFlaggedPositives = d.items.filter((x) => x.label && x.ml >= 0.5).length;
+    datasets[i].mlFlaggedNegatives = d.items.filter((x) => !x.label && x.ml >= 0.5).length;
+  }
+  const trained = ML_TRAINED_ON[c.name] || [];
+  const scored = (ds) => ds.flatMap((d) => d.items.map((x) => ({ label: x.label ? 1 : 0, score: x.ml })));
+  return {
+    model: c.name,
+    trainedOn: trained,
+    recallAtFpr: recallAtFpr(scored(out)),
+    // the same held-out rows for both, so the comparison is fair
+    ...(trained.length ? { recallAtFprHeldOut: recallAtFpr(scored(out.filter((d) => !trained.includes(d.dataset)))), heuristicRecallAtFprHeldOut: recallAtFpr(out.filter((d) => !trained.includes(d.dataset)).flatMap((d) => d.items.map((x) => ({ label: x.label ? 1 : 0, score: instructionSignals(x.text).score })))) } : {}),
+    secondsPerRow: Math.round(((Date.now() - started) / 1000 / Math.max(1, total)) * 100) / 100,
+  };
 }
 
 const result = o.track === 'b' ? await trackB() : o.track === 'c' ? trackC() : await trackA();

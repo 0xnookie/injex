@@ -7,21 +7,79 @@ on:
   workflow_dispatch:
 
 jobs:
+  # the unit tests on every Node.js line package.json allows that is still in use, on Linux and Windows
   test:
+    name: Tests (Node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        node: [20, 22, 24, 26] # 20 is end-of-life but still the engines minimum
+        include:
+          - { os: windows-latest, node: 22 }
+          - { os: windows-latest, node: 26 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Test suite
+        run: node test/run-tests.mjs
+
+      - name: Scanner benchmark (recall on the lab corpus, false positives on benign text)
+        run: node bench/run.mjs --check
+
+  # the extension in a real browser: every page and tab loads without errors, the page scanner finds every
+  # lab carrier in rendered pages (test/e2e/chrome.mjs)
+  browser:
+    name: Extension in Chrome (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Browser smoke test
+        run: node test/e2e/chrome.mjs --require
+
+  # contrib/python: the stdlib bridge and its adapters, against the CLI in this checkout
+  python:
+    name: Python bridge (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.x']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Bridge tests
+        working-directory: contrib/python
+        run: python -m unittest -v test_bridge
+
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
-
-      - name: Test suite
-        run: node test/run-tests.mjs
+          node-version: 24
 
       - name: Syntax-check all sources (as ES modules)
         run: |
           set -e
-          for f in src/*.js src/core/*.js src/core/docs/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs bench/*.mjs contrib/promptfoo/*.mjs vscode/*.js; do
+          for f in src/*.js src/core/*.js src/core/docs/*.js src/data/*.js ui/*.js ui/views/*.js cli/*.mjs tools/*.mjs test/*.mjs test/e2e/*.mjs bench/*.mjs contrib/promptfoo/*.mjs vscode/*.js; do
             node --input-type=module --check < "$f" || { echo "::error file=$f::syntax error"; exit 1; }
           done
 
@@ -34,9 +92,6 @@ jobs:
         uses: ./
         with:
           fail-on: high
-
-      - name: Scanner benchmark (recall on the lab corpus, false positives on benign text)
-        run: node bench/run.mjs --check
 
       - name: Transform index is in sync with src/transforms
         run: |
